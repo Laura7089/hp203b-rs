@@ -1,20 +1,35 @@
+//! To get started, create a [`HP203B`].
 #![no_std]
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
+
 mod registers;
 
-use registers::{flags, Register16, Register8, Registers};
-pub use registers::{CSBHigh, CSBLow, CSB};
+use csb::CSB;
+pub use registers::csb;
+use registers::{flags, flags::Flags, Register16, Registers};
 
 use core::marker::PhantomData;
 use embedded_hal::i2c::blocking::I2c;
 
+/// A HOPERF HP203B altimeter/thermometer.
 pub struct HP203B<I2C, C> {
     i2c: I2C,
     _c: PhantomData<C>,
 }
 
 /// Decimation rate of internal digital filter
+///
+/// From the datasheet:
+///
+/// OSR | Temp Conversion Time (ms) | Temp + Pressure/Alt Conv. Time (ms)
+/// ---|---|---
+/// 128 | 2.1 | 4.1
+/// 256 | 4.1 | 8.2
+/// 512 | 8.2 | 16.4
+/// 1024 | 16.4 | 32.8
+/// 2048 | 32.8 | 65.6
+/// 4096 | 65.6 | 131.1
 pub enum OSR {
     OSR4096 = 0b000,
     OSR2048 = 0b001,
@@ -26,7 +41,9 @@ pub enum OSR {
 
 /// Which data to convert with internal ADC
 pub enum Channel {
+    /// Convert Pressure/Altitude *and* temperature
     SensorPressureTemperature = 0b00,
+    /// Just convert temperature
     Temperature = 0b10,
 }
 
@@ -34,19 +51,28 @@ pub enum Channel {
 enum Command {
     SOFT_RST = 0x06,
     ADC_CVT = 0x40,
-    READ_PT = 0x10,
-    READ_AT = 0x11,
-    READ_P = 0x30,
-    READ_A = 0x31,
-    READ_T = 0x32,
     ANA_CAL = 0x28,
     READ_REG = 0x80,
     WRITE_REG = 0xC0,
 }
 
+#[allow(non_camel_case_types)]
+enum ReadValDouble {
+    PT = 0x10,
+    AT = 0x11,
+}
+
+#[allow(non_camel_case_types)]
+enum ReadValSingle {
+    P = 0x30,
+    A = 0x31,
+    T = 0x32,
+}
+
 impl<I2C, E, C> HP203B<I2C, C>
 where
     I2C: I2c<Error = E>,
+    C: CSB,
     HP203B<I2C, C>: Registers<I2C>,
 {
     /// Initialise the device
@@ -82,10 +108,7 @@ where
 
     /// Check the "device ready" flag
     pub fn is_ready(&mut self) -> Result<bool, E> {
-        Ok(
-            !flags::INT_SRC::from_bits_truncate(self.read_reg8u(Register8::INT_SRC)?)
-                .contains(flags::INT_SRC::DEV_RDY),
-        )
+        Ok(self.interrupts()?.contains(flags::INT_SRC::DEV_RDY))
     }
 
     /// Set the altitude offset
@@ -101,41 +124,46 @@ where
         self.command(Command::ANA_CAL)
     }
 
+    /// Enable or disable compensation
+    pub fn compensate(&mut self, comp: bool) -> Result<(), E> {
+        let flag = match comp {
+            true => flags::PARA::CMPS_EN,
+            false => flags::PARA::empty(),
+        };
+        self.set_para(flag)
+    }
+
+    /// Check if compensation is enabled
+    pub fn compensation_enabled(&mut self) -> Result<bool, E> {
+        Ok(self.para()?.contains(flags::PARA::CMPS_EN))
+    }
+
     // TODO: what way round is this returned? what units? same for other read_* methods
     pub fn read_temp_pressure(&mut self) -> Result<(f32, f32), E> {
-        self.command(Command::READ_PT)?;
-        self.read_two()
+        self.read_two(ReadValDouble::PT)
     }
-
     pub fn read_temp_alti(&mut self) -> Result<(f32, f32), E> {
-        self.command(Command::READ_AT)?;
-        self.read_two()
+        self.read_two(ReadValDouble::AT)
     }
-
     pub fn read_pressure(&mut self) -> Result<f32, E> {
-        self.command(Command::READ_P)?;
-        self.read_one()
+        self.read_one(ReadValSingle::P)
     }
-
     pub fn read_alti(&mut self) -> Result<f32, E> {
-        self.command(Command::READ_A)?;
-        self.read_one()
+        self.read_one(ReadValSingle::A)
     }
-
     pub fn read_temp(&mut self) -> Result<f32, E> {
-        self.command(Command::READ_T)?;
-        self.read_one()
+        self.read_one(ReadValSingle::T)
     }
 
-    fn read_one(&mut self) -> Result<f32, E> {
+    fn read_one(&mut self, cmd: ReadValSingle) -> Result<f32, E> {
         let mut raw = [0; 3];
-        self.i2c.read(Self::ADDR, &mut raw)?;
+        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
         Ok(raw_reading_to_float(&raw))
     }
 
-    fn read_two(&mut self) -> Result<(f32, f32), E> {
+    fn read_two(&mut self, cmd: ReadValDouble) -> Result<(f32, f32), E> {
         let mut raw = [0; 6];
-        self.i2c.read(Self::ADDR, &mut raw)?;
+        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
         Ok((
             raw_reading_to_float(&raw[0..3]),
             raw_reading_to_float(&raw[3..6]),
@@ -153,7 +181,7 @@ where
 fn raw_reading_to_float(reading: &[u8]) -> f32 {
     assert!(reading.len() == 3);
     let signed: i32 = {
-        let mut base = if reading[0] & 0b0000_1000 == 0b0000_1000 {
+        let mut base = if reading[0] & (1 << 3) == (1 << 3) {
             i32::MIN + 0x7FF8_0000
         } else {
             0
