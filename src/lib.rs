@@ -89,6 +89,8 @@ where
             i2c,
             _c: PhantomData,
         };
+        new.reset()?;
+        // TODO: sleep?
         new.osr_channel(osr, ch)?;
         Ok(new)
     }
@@ -109,6 +111,7 @@ where
     /// Perform a software reset
     pub fn reset(&mut self) -> Result<(), E> {
         self.command(Command::SOFT_RST)
+        // TODO: sleep?
     }
 
     /// Check the "device ready" flag
@@ -143,19 +146,25 @@ where
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    // TODO: what way round is this returned? what units? same for other read_* methods
+    /// Gets tuple of temperature (celsius) and pressure (pascals)
     pub fn read_temp_pressure(&mut self) -> Result<(f32, f32), E> {
         self.read_two(ReadValDouble::PT)
     }
+
+    // TODO: check altitude units
+    /// Gets tuple of temperature (celsius) and altitude (metres)
     pub fn read_temp_alti(&mut self) -> Result<(f32, f32), E> {
         self.read_two(ReadValDouble::AT)
     }
+    /// Gets pressure in pascals
     pub fn read_pressure(&mut self) -> Result<f32, E> {
         self.read_one(ReadValSingle::P)
     }
+    /// Gets altitude in pascals
     pub fn read_alti(&mut self) -> Result<f32, E> {
         self.read_one(ReadValSingle::A)
     }
+    /// Gets temperature in celsius
     pub fn read_temp(&mut self) -> Result<f32, E> {
         self.read_one(ReadValSingle::T)
     }
@@ -180,7 +189,6 @@ where
     }
 }
 
-// TODO: is the read order MSB -> LSB?
 /// Takes a 24-bit 2's complement number and converts it to a float/100
 #[allow(clippy::cast_precision_loss)]
 fn raw_reading_to_float(reading: &[u8]) -> f32 {
