@@ -1,6 +1,6 @@
 [package]
 name = "hp203b"
-version = "0.1.0-pre.2"
+version = "0.1.0-pre.3"
 edition = "2021"
 description = "`embedded-hal`-based driver crate for the HOPERF HP203B altimeter/barometer"
 repository = "https://github.com/Laura7089/hp203b-rs"
