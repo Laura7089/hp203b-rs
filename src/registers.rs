@@ -16,6 +16,7 @@ impl CSB for CSBLow {
 // TODO: remove flags registers from this?
 /// 8-bit registers
 #[allow(non_camel_case_types)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Register8 {
     /// Temperature event upper bound threshold
     ///
@@ -78,12 +79,12 @@ pub(crate) mod flags {
         /// Enable or disable individual interrupts.
         #[allow(non_camel_case_types)]
         pub(crate) struct INT_EN: u8 {
-            const PA_RDY_EN = 0b00100000;
-            const T_RDY_EN = 0b00010000;
-            const PA_TRAV_EN = 0b00001000;
-            const T_TRAV_EN = 0b00000100;
-            const PA_WIN_EN = 0b00000010;
-            const T_WIN_EN = 0b00000001;
+            const PA_RDY_EN = 0b0010_0000;
+            const T_RDY_EN = 0b0001_0000;
+            const PA_TRAV_EN = 0b0000_1000;
+            const T_TRAV_EN = 0b0000_0100;
+            const PA_WIN_EN = 0b0000_0010;
+            const T_WIN_EN = 0b0000_0001;
         }
 
         /// Flags in [`Register8::INT_CFG`]
@@ -97,33 +98,33 @@ pub(crate) mod flags {
             /// ---|---
             /// Enabled | All `PA_*` items refer to altitude
             /// Disabled | All `PA_*` items refer to pressure
-            const PA_MODE = 0b01000000;
-            const PA_RDY_CFG = 0b00100000;
-            const T_RDY_CFG = 0b00010000;
-            const PA_TRAV_CFG = 0b00001000;
-            const T_TRAV_CFG = 0b00000100;
-            const PA_WIN_CFG = 0b00000010;
-            const T_WIN_CFG = 0b000000001;
+            const PA_MODE = 0b0100_0000;
+            const PA_RDY_CFG = 0b0010_0000;
+            const T_RDY_CFG = 0b0001_0000;
+            const PA_TRAV_CFG = 0b0000_1000;
+            const T_TRAV_CFG = 0b0000_0100;
+            const PA_WIN_CFG = 0b0000_0010;
+            const T_WIN_CFG = 0b0000_0001;
         }
 
         /// Flags in [`Register8::INT_SRC`]
         #[allow(non_camel_case_types)]
         pub(crate) struct INT_SRC: u8 {
-            const TH_ERR = 0b10000000;
+            const TH_ERR = 0b1000_0000;
             /// Device ready bit
-            const DEV_RDY = 0b01000000;
+            const DEV_RDY = 0b0100_0000;
             /// Pressure or altitude measurement ready to read
-            const PA_RDY = 0b00100000;
+            const PA_RDY = 0b0010_0000;
             /// Temperature measurement ready to read
-            const T_RDY = 0b00010000;
+            const T_RDY = 0b0001_0000;
             /// Pressure or altitude traversed the middle threshold
-            const PA_TRAV = 0b00001000;
+            const PA_TRAV = 0b0000_1000;
             /// Temperature traversed the middle threshold
-            const T_TRAV = 0b00000100;
+            const T_TRAV = 0b0000_0100;
             /// Pressure or altitude is outside of the lower and upper bounds
-            const PA_WIN = 0b00000010;
+            const PA_WIN = 0b0000_0010;
             /// Temperature is outside of the lower and upper bounds
-            const T_WIN = 0b00000001;
+            const T_WIN = 0b0000_0001;
         }
 
         /// Flags in [`Register8::INT_DIR`]
@@ -137,16 +138,16 @@ pub(crate) mod flags {
         /// low to high, otherwise it is falling from high to low.
         #[allow(non_camel_case_types)]
         pub(crate) struct INT_DIR: u8 {
-            const CMPS_EN = 0b10000000;
-            const P_TRAV_DIR = 0b00001000;
-            const T_TRAV_DIR = 0b00000100;
-            const P_WIN_DIR = 0b00000010;
-            const T_WIN_DIR = 0b00000001;
+            const CMPS_EN = 0b1000_0000;
+            const P_TRAV_DIR = 0b0000_1000;
+            const T_TRAV_DIR = 0b0000_0100;
+            const P_WIN_DIR = 0b0000_0010;
+            const T_WIN_DIR = 0b0000_0001;
         }
 
         #[allow(non_camel_case_types)]
         pub(crate) struct PARA: u8 {
-            const CMPS_EN = 0b10000000;
+            const CMPS_EN = 0b1000_0000;
         }
     }
 }
@@ -172,30 +173,49 @@ pub trait Registers<I: I2c> {
         self.i2c().write(Self::ADDR, &to_write)
     }
 
-    fn read_reg8(&mut self, reg: Register8) -> Result<u8, I::Error> {
+    fn read_reg8u(&mut self, reg: Register8) -> Result<u8, I::Error> {
         self.read_raw(reg as u8)
     }
 
-    fn read_reg16(&mut self, reg: Register16) -> Result<u16, I::Error> {
-        let lsb_addr = reg as u8;
-        let lsb = self.read_raw(lsb_addr)? as u16;
-        let msb = (self.read_raw(lsb_addr + 1)? as u16) << 8;
-
-        Ok(lsb + msb)
+    fn read_reg8s(&mut self, reg: Register8) -> Result<i8, I::Error> {
+        let raw = self.read_raw(reg as u8)?;
+        Ok(bytemuck::cast(raw))
     }
 
-    fn write_reg8(&mut self, reg: Register8, val: u8) -> Result<(), I::Error> {
+    fn read_reg16u(&mut self, reg: Register16) -> Result<u16, I::Error> {
+        let lsb_addr = reg as u8;
+        let raw = [self.read_raw(lsb_addr + 1)?, self.read_raw(lsb_addr)?];
+        Ok(bytemuck::cast(raw))
+    }
+
+    fn read_reg16s(&mut self, reg: Register16) -> Result<i16, I::Error> {
+        let lsb_addr = reg as u8;
+        let raw = [self.read_raw(lsb_addr + 1)?, self.read_raw(lsb_addr)?];
+        Ok(bytemuck::cast(raw))
+    }
+
+    fn write_reg8u(&mut self, reg: Register8, val: u8) -> Result<(), I::Error> {
         self.write_raw(reg as u8, val)
     }
 
-    fn write_reg16(&mut self, reg: Register16, val: u16) -> Result<(), I::Error> {
-        let lsb_addr = reg as u8;
-        let lsb = val as u8;
-        let msb = (val >> 8) as u8;
+    fn write_reg8s(&mut self, reg: Register8, val: i8) -> Result<(), I::Error> {
+        self.write_raw(reg as u8, bytemuck::cast(val))
+    }
 
-        self.write_raw(lsb_addr, lsb)?;
-        self.write_raw(lsb_addr + 1, msb)?;
-        Ok(())
+    fn write_reg16u(&mut self, reg: Register16, val: u16) -> Result<(), I::Error> {
+        let lsb_addr = reg as u8;
+        let raw = bytemuck::bytes_of(&val);
+
+        self.write_raw(lsb_addr, raw[1])
+            .and(self.write_raw(lsb_addr + 1, raw[0]))
+    }
+
+    fn write_reg16s(&mut self, reg: Register16, val: i16) -> Result<(), I::Error> {
+        let lsb_addr = reg as u8;
+        let raw = bytemuck::bytes_of(&val);
+
+        self.write_raw(lsb_addr, raw[1])
+            .and(self.write_raw(lsb_addr + 1, raw[0]))
     }
 }
 
@@ -204,7 +224,6 @@ where
     I2C: I2c<Error = E>,
 {
     const ADDR: u8 = CSBHigh::ADDR;
-    #[inline(always)]
     fn i2c(&mut self) -> &mut I2C {
         &mut self.i2c
     }
@@ -215,7 +234,6 @@ where
     I2C: I2c<Error = E>,
 {
     const ADDR: u8 = CSBLow::ADDR;
-    #[inline(always)]
     fn i2c(&mut self) -> &mut I2C {
         &mut self.i2c
     }
