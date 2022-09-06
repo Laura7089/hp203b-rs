@@ -14,7 +14,11 @@ use core::marker::PhantomData;
 use embedded_hal::i2c::blocking::I2c;
 
 /// A HOPERF HP203B altimeter/thermometer.
-pub struct HP203B<I2C, C> {
+pub struct HP203B<I2C, C = csb::CSBLow>
+where
+    I2C: I2c,
+    C: CSB,
+{
     i2c: I2C,
     _c: PhantomData<C>,
 }
