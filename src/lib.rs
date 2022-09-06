@@ -1,5 +1,6 @@
 //! To get started, create a [`HP203B`].
 #![no_std]
+#![forbid(unsafe_code)]
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
