@@ -5,17 +5,17 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-// TODO: add methods for setting window and traversal figures
+// TODO: type-model whether the device is set to pressure or altitude?
 // TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
+// TODO: take a delay object when initialising so we can wait out the resets and similar?
 
 mod flags;
-// TODO: cargo flag
 pub mod interrupts;
 mod registers;
 
 use flags::Flags;
 pub use registers::csb;
-use registers::{Register16, Registers};
+use registers::{Register16, Register8, Registers};
 
 use core::marker::PhantomData;
 use embedded_hal::i2c::blocking::I2c;
@@ -168,8 +168,102 @@ where
     ///
     /// `offset` is the current altitude in centimetres.
     pub fn set_alt_offset(&mut self, offset: i16) -> Result<(), E> {
-        self.write_reg16s(Register16::ALT_OFF, offset)?;
-        Ok(())
+        self.write_reg16s(Register16::ALT_OFF, offset)
+    }
+
+    /// Set the window bounds for the altitude measurement
+    ///
+    /// Units are in metres.
+    /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
+    ///
+    /// Panics if `bounds.0 > bounds.1`.
+    ///
+    /// ### Warning
+    ///
+    /// If you set these values and then read a pressure value without changing these with
+    /// [`HP203B::set_pres_bounds`] the resulting behaviour is undefined.
+    pub fn set_alti_bounds(&mut self, bounds: (i16, i16)) -> Result<(), E> {
+        if bounds.0 > bounds.1 {
+            panic!(
+                "Lower bound {} is larger than upper bound {}",
+                bounds.0, bounds.1
+            );
+        }
+        self.write_reg16s(Register16::PA_L_TH_LS, bounds.0)
+            .and(self.write_reg16s(Register16::PA_H_TH_LS, bounds.1))
+    }
+
+    /// Set the window bounds for the pressure measurement
+    ///
+    /// Units are in 0.02*mbar.
+    /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
+    ///
+    /// Panics if `bounds.0 > bounds.1`.
+    ///
+    /// ### Warning
+    ///
+    /// If you set these values and then read an altitude value without changing these with
+    /// [`HP203B::set_alti_bounds`] the resulting behaviour is undefined.
+    pub fn set_pres_bounds(&mut self, bounds: (u16, u16)) -> Result<(), E> {
+        if bounds.0 > bounds.1 {
+            panic!(
+                "Lower bound {} is larger than upper bound {}",
+                bounds.0, bounds.1
+            );
+        }
+        self.write_reg16u(Register16::PA_L_TH_LS, bounds.0)
+            .and(self.write_reg16u(Register16::PA_H_TH_LS, bounds.1))
+    }
+
+    /// Set the window bounds for the temperature measurement
+    ///
+    /// Units are in degrees celsius.
+    /// Used by the [`interrupts::Event::TemperatureOutsideWindow`] interrupt.
+    ///
+    /// Panics if `bounds.0 > bounds.1`.
+    pub fn set_temp_bounds(&mut self, bounds: (i8, i8)) -> Result<(), E> {
+        if bounds.0 > bounds.1 {
+            panic!(
+                "Lower bound {} is larger than upper bound {}",
+                bounds.0, bounds.1
+            );
+        }
+        self.write_reg8(Register8::T_L_TH, bounds.0)
+            .and(self.write_reg8(Register8::T_H_TH, bounds.1))
+    }
+
+    /// Set the middle threshold for the altitude measurement
+    ///
+    /// Units are in metres.
+    /// Used by the [`interrupts::Event::PATraversed`] interrupt.
+    ///
+    /// ### Warning
+    ///
+    /// If you set this value and then read a pressure value without changing it with
+    /// [`HP203B::set_pres_mid`] the resulting behaviour is undefined.
+    pub fn set_alti_mid(&mut self, mid: i16) -> Result<(), E> {
+        self.write_reg16s(Register16::PA_M_TH_LS, mid)
+    }
+
+    /// Set the middle threshold for the pressure measurement
+    ///
+    /// Units are in 0.02*mbar.
+    /// Used by the [`interrupts::Event::PATraversed`] interrupt.
+    ///
+    /// ### Warning
+    ///
+    /// If you set this value and then read an altitude value without changing it with
+    /// [`HP203B::set_alti_mid`] the resulting behaviour is undefined.
+    pub fn set_pres_mid(&mut self, mid: u16) -> Result<(), E> {
+        self.write_reg16u(Register16::PA_M_TH_LS, mid)
+    }
+
+    /// Set the middle threshold for the temperature measurement
+    ///
+    /// Units are in degrees celvius.
+    /// Used by the [`interrupts::Event::TemperatureTraversed`] interrupt.
+    pub fn set_temp_mid(&mut self, mid: i8) -> Result<(), E> {
+        self.write_reg8(Register8::T_M_TH, mid)
     }
 
     /// Recalibrate the internal analog blocks
@@ -249,6 +343,7 @@ fn raw_reading_to_float(reading: &[u8]) -> f32 {
     signed as f32 / 100.0
 }
 
+// TODO: more tests
 #[cfg(test)]
 mod tests {
     use super::*;

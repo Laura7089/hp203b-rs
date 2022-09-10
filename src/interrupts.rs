@@ -1,9 +1,8 @@
 //! Types and methods for configuring and receiving interrupts on the altimeter
 //!
+// TODO: make this runnable
 //! ```no_run
-//! // TODO: make this runnable
-//! // ... setup window + traversal boundaries
-//!
+//! alti.set_alti_mid(100)?;
 //! alti.setup_interrupts(&[(Event::PATraversed, InterruptSetting::Enabled)])?;
 //!
 //! let _ = alti.read_bar(BaroMeasurement::Altitude)?;
@@ -11,7 +10,7 @@
 //! // Let's check if it moved across our midpoint
 //! for int in alti.interrupts()? {
 //!     if int == Event::PATraversed {
-//!         println!("The barometric reading crossed the midpoint!");
+//!         println!("The altitude reading crossed the midpoint!");
 //!     }
 //! }
 //! ```
@@ -21,6 +20,8 @@
 //! This crate does not have any mechanism for dealing with the interrupt pin from the altimeter, defined as `INT1` in the datasheet.
 //! You must watch that pin yourself, and call [`HP203B::interrupts`] and related functions as
 //! appropriate for your use case.
+
+use core::iter::FusedIterator;
 
 use crate::flags::{self, Flags, INT_CFG, INT_DIR, INT_EN};
 use crate::HP203B;
@@ -154,6 +155,7 @@ impl Iterator for Interrupts {
         None
     }
 }
+impl FusedIterator for Interrupts {}
 
 /// Interrupt-related methods on the altimeter
 pub trait HasInterrupts<E> {
