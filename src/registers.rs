@@ -130,8 +130,9 @@ pub trait Registers<I: I2c> {
     }
 }
 
-impl<I2C, E, C> Registers<I2C> for HP203B<I2C, C>
+impl<I2C, M, E, C> Registers<I2C> for HP203B<I2C, M, C>
 where
+    M: crate::mode::BarometricMeasurement,
     C: csb::CSB,
     I2C: I2c<Error = E>,
 {

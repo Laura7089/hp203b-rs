@@ -5,7 +5,6 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-// TODO: type-model whether the device is set to pressure or altitude?
 // TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
 // TODO: take a delay object when initialising so we can wait out the resets and similar?
 
@@ -13,21 +12,34 @@ mod flags;
 pub mod interrupts;
 mod registers;
 
-use flags::Flags;
+use flags::{Flags, INT_CFG, INT_EN};
 pub use registers::csb;
 use registers::{Register16, Register8, Registers};
 
 use core::marker::PhantomData;
 use embedded_hal::i2c::blocking::I2c;
 
+/// Mode-setting for the altimeter
+#[allow(missing_docs)]
+pub mod mode {
+    pub trait BarometricMeasurement {}
+    /// Altitude, in metres
+    pub struct Altitude;
+    impl BarometricMeasurement for Altitude {}
+    /// Pressure, in pascals
+    pub struct Pressure;
+    impl BarometricMeasurement for Pressure {}
+}
+
 /// A HOPERF HP203B altimeter/thermometer.
-pub struct HP203B<I2C, C = csb::CSBLow>
+pub struct HP203B<I2C, M = mode::Altitude, C = csb::CSBLow>
 where
     I2C: I2c,
+    M: mode::BarometricMeasurement,
     C: csb::CSB,
 {
     i2c: I2C,
-    _c: PhantomData<C>,
+    _c: PhantomData<(C, M)>,
 }
 
 /// Decimation rate of internal digital filter
@@ -77,69 +89,13 @@ enum Command {
     WRITE_REG = 0xC0,
 }
 
-/// Which measurement to make from the barometric function of the device
-pub enum BaroMeasurement {
-    /// Pressure in pascals
-    Pressure,
-    // TODO: check this unit
-    /// Altitude in metres
-    Altitude,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug)]
-enum ReadValDouble {
-    PT = 0x10,
-    AT = 0x11,
-}
-
-impl Into<ReadValDouble> for BaroMeasurement {
-    fn into(self) -> ReadValDouble {
-        match self {
-            BaroMeasurement::Pressure => ReadValDouble::PT,
-            BaroMeasurement::Altitude => ReadValDouble::AT,
-        }
-    }
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug)]
-enum ReadValSingle {
-    P = 0x30,
-    A = 0x31,
-    T = 0x32,
-}
-
-impl Into<ReadValSingle> for BaroMeasurement {
-    fn into(self) -> ReadValSingle {
-        match self {
-            BaroMeasurement::Pressure => ReadValSingle::P,
-            BaroMeasurement::Altitude => ReadValSingle::A,
-        }
-    }
-}
-
-impl<I2C, E, C> HP203B<I2C, C>
+impl<I2C, E, M, C> HP203B<I2C, M, C>
 where
     I2C: I2c<Error = E>,
+    M: mode::BarometricMeasurement,
     C: csb::CSB,
-    HP203B<I2C, C>: Registers<I2C>,
+    HP203B<I2C, M, C>: Registers<I2C>,
 {
-    /// Initialise the device
-    ///
-    /// Takes an I2C bus and settings for the onboard ADC.
-    /// See [`Self::osr_channel`].
-    pub fn new(i2c: I2C, osr: OSR, ch: Channel) -> Result<Self, E> {
-        let mut new = Self {
-            i2c,
-            _c: PhantomData,
-        };
-        new.reset()?;
-        // TODO: sleep?
-        new.osr_channel(osr, ch)?;
-        Ok(new)
-    }
-
     /// Destroy the sensor struct and yield the I2C device it held
     pub fn destroy(self) -> I2C {
         self.i2c
@@ -164,98 +120,18 @@ where
         Ok(self.get_interrupts()?.contains(flags::INT_SRC::DEV_RDY))
     }
 
-    /// Set the altitude offset
-    ///
-    /// `offset` is the current altitude in centimetres.
-    pub fn set_alt_offset(&mut self, offset: i16) -> Result<(), E> {
-        self.write_reg16s(Register16::ALT_OFF, offset)
-    }
-
-    /// Set the window bounds for the altitude measurement
-    ///
-    /// Units are in metres.
-    /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
-    ///
-    /// Panics if `bounds.0 > bounds.1`.
-    ///
-    /// ### Warning
-    ///
-    /// If you set these values and then read a pressure value without changing these with
-    /// [`HP203B::set_pres_bounds`] the resulting behaviour is undefined.
-    pub fn set_alti_bounds(&mut self, bounds: (i16, i16)) -> Result<(), E> {
-        if bounds.0 > bounds.1 {
-            panic!(
-                "Lower bound {} is larger than upper bound {}",
-                bounds.0, bounds.1
-            );
-        }
-        self.write_reg16s(Register16::PA_L_TH_LS, bounds.0)
-            .and(self.write_reg16s(Register16::PA_H_TH_LS, bounds.1))
-    }
-
-    /// Set the window bounds for the pressure measurement
-    ///
-    /// Units are in 0.02*mbar.
-    /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
-    ///
-    /// Panics if `bounds.0 > bounds.1`.
-    ///
-    /// ### Warning
-    ///
-    /// If you set these values and then read an altitude value without changing these with
-    /// [`HP203B::set_alti_bounds`] the resulting behaviour is undefined.
-    pub fn set_pres_bounds(&mut self, bounds: (u16, u16)) -> Result<(), E> {
-        if bounds.0 > bounds.1 {
-            panic!(
-                "Lower bound {} is larger than upper bound {}",
-                bounds.0, bounds.1
-            );
-        }
-        self.write_reg16u(Register16::PA_L_TH_LS, bounds.0)
-            .and(self.write_reg16u(Register16::PA_H_TH_LS, bounds.1))
-    }
-
     /// Set the window bounds for the temperature measurement
     ///
     /// Units are in degrees celsius.
     /// Used by the [`interrupts::Event::TemperatureOutsideWindow`] interrupt.
     ///
-    /// Panics if `bounds.0 > bounds.1`.
-    pub fn set_temp_bounds(&mut self, bounds: (i8, i8)) -> Result<(), E> {
-        if bounds.0 > bounds.1 {
-            panic!(
-                "Lower bound {} is larger than upper bound {}",
-                bounds.0, bounds.1
-            );
+    /// Panics if `lower > upper`.
+    pub fn set_temp_bounds(&mut self, lower: i8, upper: i8) -> Result<(), E> {
+        if lower > upper {
+            panic!("Lower bound {lower} is larger than upper bound {upper}",);
         }
-        self.write_reg8(Register8::T_L_TH, bounds.0)
-            .and(self.write_reg8(Register8::T_H_TH, bounds.1))
-    }
-
-    /// Set the middle threshold for the altitude measurement
-    ///
-    /// Units are in metres.
-    /// Used by the [`interrupts::Event::PATraversed`] interrupt.
-    ///
-    /// ### Warning
-    ///
-    /// If you set this value and then read a pressure value without changing it with
-    /// [`HP203B::set_pres_mid`] the resulting behaviour is undefined.
-    pub fn set_alti_mid(&mut self, mid: i16) -> Result<(), E> {
-        self.write_reg16s(Register16::PA_M_TH_LS, mid)
-    }
-
-    /// Set the middle threshold for the pressure measurement
-    ///
-    /// Units are in 0.02*mbar.
-    /// Used by the [`interrupts::Event::PATraversed`] interrupt.
-    ///
-    /// ### Warning
-    ///
-    /// If you set this value and then read an altitude value without changing it with
-    /// [`HP203B::set_alti_mid`] the resulting behaviour is undefined.
-    pub fn set_pres_mid(&mut self, mid: u16) -> Result<(), E> {
-        self.write_reg16u(Register16::PA_M_TH_LS, mid)
+        self.write_reg8(Register8::T_L_TH, lower)
+            .and(self.write_reg8(Register8::T_H_TH, upper))
     }
 
     /// Set the middle threshold for the temperature measurement
@@ -285,21 +161,6 @@ where
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    /// Read both a barometric measurement and the temperature
-    ///
-    /// From the device, read and return (in that order) both:
-    ///
-    /// 1. temperature value (celsius)
-    /// 1. `measure`
-    pub fn read_both(&mut self, measure: BaroMeasurement) -> Result<(f32, f32), E> {
-        self.read_two(measure.into())
-    }
-
-    /// Read a barometric measurement
-    pub fn read_bar(&mut self, measure: BaroMeasurement) -> Result<f32, E> {
-        self.read_one(measure.into())
-    }
-
     /// Gets temperature in celsius
     pub fn read_temp(&mut self) -> Result<f32, E> {
         self.read_one(ReadValSingle::T)
@@ -322,6 +183,176 @@ where
 
     fn command(&mut self, cmd: Command) -> Result<(), E> {
         self.i2c.write(Self::ADDR, &[cmd as u8])
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+enum ReadValDouble {
+    PT = 0x10,
+    AT = 0x11,
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+enum ReadValSingle {
+    P = 0x30,
+    A = 0x31,
+    T = 0x32,
+}
+
+impl<I, E, C> HP203B<I, mode::Pressure, C>
+where
+    I: I2c<Error = E>,
+    C: csb::CSB,
+    HP203B<I, mode::Pressure, C>: Registers<I>,
+{
+    /// Convert the altimeter to read altitude
+    ///
+    /// Note that this resets the interrupt flags for [`interrupts::Event::PATraversed`] and
+    /// [`interrupts::Event::PAOutsideWindow`]
+    pub fn to_altitude(self) -> Result<HP203B<I, mode::Altitude, C>, E> {
+        let mut new = HP203B::<_, mode::Altitude, _> {
+            i2c: self.destroy(),
+            _c: PhantomData,
+        };
+
+        new.set_alti_bounds(0, 0)?;
+        new.set_alti_mid(0)?;
+
+        let mut new_en_flags = new.get_interrupts_enabled()?;
+        new_en_flags.remove(INT_EN::PA_TRAV_EN);
+        new_en_flags.remove(INT_EN::PA_WIN_EN);
+        new.set_interrupts_enabled(new_en_flags)?;
+
+        new.set_offset(0)?;
+
+        let mut new_pinout_flags = new.get_interrupts_pinout()?;
+        new_pinout_flags.insert(INT_CFG::PA_MODE);
+        new.set_interrupts_pinout(new_pinout_flags)?;
+
+        Ok(new)
+    }
+
+    /// Set the window bounds for the pressure measurement
+    ///
+    /// Units are in mbar.
+    /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
+    ///
+    /// Panics if `lower > upper`.
+    pub fn set_pres_bounds(&mut self, lower: f32, upper: f32) -> Result<(), E> {
+        if lower > upper {
+            panic!("Lower bound {lower} is larger than upper bound {upper}",);
+        }
+        self.write_reg16u(Register16::PA_L_TH_LS, (lower / 0.02) as u16)
+            .and(self.write_reg16u(Register16::PA_H_TH_LS, (upper / 0.02) as u16))
+    }
+
+    /// Set the middle threshold for the pressure measurement
+    ///
+    /// Units are in mbar.
+    /// Used by the [`interrupts::Event::PATraversed`] interrupt.
+    pub fn set_pres_mid(&mut self, mid: f32) -> Result<(), E> {
+        self.write_reg16u(Register16::PA_M_TH_LS, (mid / 0.02) as u16)
+    }
+
+    /// Read both the temperature and pressure
+    pub fn read_pres_temp(&mut self) -> Result<(f32, f32), E> {
+        self.read_two(ReadValDouble::PT)
+    }
+
+    /// Read a pressure measurement
+    pub fn read_pres(&mut self) -> Result<f32, E> {
+        self.read_one(ReadValSingle::P)
+    }
+}
+
+impl<I2C, E, C> HP203B<I2C, mode::Altitude, C>
+where
+    I2C: I2c<Error = E>,
+    C: csb::CSB,
+    HP203B<I2C, mode::Altitude, C>: Registers<I2C>,
+{
+    /// Initialise the device in altitude mode
+    ///
+    /// Takes an I2C bus and settings for the onboard ADC
+    /// (see [`Self::osr_channel`]).
+    /// Resets the configuration registers.
+    pub fn new(i2c: I2C, osr: OSR, ch: Channel) -> Result<Self, E> {
+        let mut new = Self {
+            i2c,
+            _c: PhantomData,
+        };
+        new.reset()?;
+        // TODO: sleep?
+        new.osr_channel(osr, ch)?;
+        new.set_interrupts_enabled(INT_EN::from_bits_truncate(0))?;
+        new.set_interrupts_pinout(INT_CFG::PA_MODE)?;
+        Ok(new)
+    }
+
+    /// Convert the altimeter to read pressure
+    ///
+    /// Note that this resets the interrupt flags for [`interrupts::Event::PATraversed`] and
+    /// [`interrupts::Event::PAOutsideWindow`]
+    pub fn to_pressure(self) -> Result<HP203B<I2C, mode::Pressure, C>, E> {
+        let mut new = HP203B::<_, mode::Pressure, _> {
+            i2c: self.destroy(),
+            _c: PhantomData,
+        };
+
+        new.set_pres_bounds(0.0, 0.0)?;
+        new.set_pres_mid(0.0)?;
+
+        let mut new_en_flags = new.get_interrupts_enabled()?;
+        new_en_flags.remove(INT_EN::PA_TRAV_EN);
+        new_en_flags.remove(INT_EN::PA_WIN_EN);
+        new.set_interrupts_enabled(new_en_flags)?;
+
+        let mut new_pinout_flags = new.get_interrupts_pinout()?;
+        new_pinout_flags.remove(INT_CFG::PA_MODE);
+        new.set_interrupts_pinout(new_pinout_flags)?;
+
+        Ok(new)
+    }
+
+    /// Set the altitude offset
+    ///
+    /// `offset` is the current altitude in centimetres.
+    pub fn set_offset(&mut self, offset: i16) -> Result<(), E> {
+        self.write_reg16s(Register16::ALT_OFF, offset)
+    }
+
+    /// Set the window bounds for the altitude measurement
+    ///
+    /// Units are in metres.
+    /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
+    ///
+    /// Panics if `lower > upper`.
+    pub fn set_alti_bounds(&mut self, lower: i16, upper: i16) -> Result<(), E> {
+        if lower > upper {
+            panic!("Lower bound {lower} is larger than upper bound {upper}",);
+        }
+        self.write_reg16s(Register16::PA_L_TH_LS, lower)
+            .and(self.write_reg16s(Register16::PA_H_TH_LS, upper))
+    }
+
+    /// Set the middle threshold for the altitude measurement
+    ///
+    /// Units are in metres.
+    /// Used by the [`interrupts::Event::PATraversed`] interrupt.
+    pub fn set_alti_mid(&mut self, mid: i16) -> Result<(), E> {
+        self.write_reg16s(Register16::PA_M_TH_LS, mid)
+    }
+
+    /// Read both the temperature and altitude
+    pub fn read_alti_temp(&mut self) -> Result<(f32, f32), E> {
+        self.read_two(ReadValDouble::AT)
+    }
+
+    /// Read an altitude measurement
+    pub fn read_alti(&mut self) -> Result<f32, E> {
+        self.read_one(ReadValSingle::A)
     }
 }
 

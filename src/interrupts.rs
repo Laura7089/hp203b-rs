@@ -222,9 +222,10 @@ pub trait HasInterrupts<E> {
     fn temp_window_status(&mut self) -> Result<Option<WindowPosition>, E>;
 }
 
-impl<I, C, E> HasInterrupts<E> for HP203B<I, C>
+impl<I, M, C, E> HasInterrupts<E> for HP203B<I, M, C>
 where
     I: embedded_hal::i2c::blocking::I2c<Error = E>,
+    M: crate::mode::BarometricMeasurement,
     C: crate::csb::CSB,
 {
     fn interrupts(&mut self) -> Result<Interrupts, E> {
