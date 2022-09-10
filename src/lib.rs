@@ -1,14 +1,21 @@
 //! To get started, create a [`HP203B`].
 #![no_std]
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+// TODO: add methods for setting window and traversal figures
+// TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
+
+mod flags;
+// TODO: cargo flag
+pub mod interrupts;
 mod registers;
 
-use csb::CSB;
+use flags::Flags;
 pub use registers::csb;
-use registers::{flags, flags::Flags, Register16, Registers};
+use registers::{Register16, Registers};
 
 use core::marker::PhantomData;
 use embedded_hal::i2c::blocking::I2c;
@@ -17,7 +24,7 @@ use embedded_hal::i2c::blocking::I2c;
 pub struct HP203B<I2C, C = csb::CSBLow>
 where
     I2C: I2c,
-    C: CSB,
+    C: csb::CSB,
 {
     i2c: I2C,
     _c: PhantomData<C>,
@@ -35,16 +42,24 @@ where
 /// 1024 | 16.4 | 32.8
 /// 2048 | 32.8 | 65.6
 /// 4096 | 65.6 | 131.1
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OSR {
+    /// Decimeation rate = 4096
     OSR4096 = 0b000,
+    /// Decimeation rate = 2048
     OSR2048 = 0b001,
+    /// Decimeation rate = 1024
     OSR1024 = 0b010,
+    /// Decimeation rate = 512
     OSR512 = 0b011,
+    /// Decimeation rate = 256
     OSR256 = 0b100,
+    /// Decimeation rate = 128
     OSR128 = 0b101,
 }
 
 /// Which data to convert with internal ADC
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Channel {
     /// Convert Pressure/Altitude *and* temperature
     SensorPressureTemperature = 0b00,
@@ -53,6 +68,7 @@ pub enum Channel {
 }
 
 #[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
 enum Command {
     SOFT_RST = 0x06,
     ADC_CVT = 0x40,
@@ -61,23 +77,52 @@ enum Command {
     WRITE_REG = 0xC0,
 }
 
+/// Which measurement to make from the barometric function of the device
+pub enum BaroMeasurement {
+    /// Pressure in pascals
+    Pressure,
+    // TODO: check this unit
+    /// Altitude in metres
+    Altitude,
+}
+
 #[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
 enum ReadValDouble {
     PT = 0x10,
     AT = 0x11,
 }
 
+impl Into<ReadValDouble> for BaroMeasurement {
+    fn into(self) -> ReadValDouble {
+        match self {
+            BaroMeasurement::Pressure => ReadValDouble::PT,
+            BaroMeasurement::Altitude => ReadValDouble::AT,
+        }
+    }
+}
+
 #[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
 enum ReadValSingle {
     P = 0x30,
     A = 0x31,
     T = 0x32,
 }
 
+impl Into<ReadValSingle> for BaroMeasurement {
+    fn into(self) -> ReadValSingle {
+        match self {
+            BaroMeasurement::Pressure => ReadValSingle::P,
+            BaroMeasurement::Altitude => ReadValSingle::A,
+        }
+    }
+}
+
 impl<I2C, E, C> HP203B<I2C, C>
 where
     I2C: I2c<Error = E>,
-    C: CSB,
+    C: csb::CSB,
     HP203B<I2C, C>: Registers<I2C>,
 {
     /// Initialise the device
@@ -116,7 +161,7 @@ where
 
     /// Check the "device ready" flag
     pub fn is_ready(&mut self) -> Result<bool, E> {
-        Ok(self.interrupts()?.contains(flags::INT_SRC::DEV_RDY))
+        Ok(self.get_interrupts()?.contains(flags::INT_SRC::DEV_RDY))
     }
 
     /// Set the altitude offset
@@ -142,28 +187,25 @@ where
     }
 
     /// Check if compensation is enabled
-    pub fn compensation_enabled(&mut self) -> Result<bool, E> {
+    pub fn is_compensation_enabled(&mut self) -> Result<bool, E> {
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    /// Gets tuple of temperature (celsius) and pressure (pascals)
-    pub fn read_temp_pressure(&mut self) -> Result<(f32, f32), E> {
-        self.read_two(ReadValDouble::PT)
+    /// Read both a barometric measurement and the temperature
+    ///
+    /// From the device, read and return (in that order) both:
+    ///
+    /// 1. temperature value (celsius)
+    /// 1. `measure`
+    pub fn read_both(&mut self, measure: BaroMeasurement) -> Result<(f32, f32), E> {
+        self.read_two(measure.into())
     }
 
-    // TODO: check altitude units
-    /// Gets tuple of temperature (celsius) and altitude (metres)
-    pub fn read_temp_alti(&mut self) -> Result<(f32, f32), E> {
-        self.read_two(ReadValDouble::AT)
+    /// Read a barometric measurement
+    pub fn read_bar(&mut self, measure: BaroMeasurement) -> Result<f32, E> {
+        self.read_one(measure.into())
     }
-    /// Gets pressure in pascals
-    pub fn read_pressure(&mut self) -> Result<f32, E> {
-        self.read_one(ReadValSingle::P)
-    }
-    /// Gets altitude in pascals
-    pub fn read_alti(&mut self) -> Result<f32, E> {
-        self.read_one(ReadValSingle::A)
-    }
+
     /// Gets temperature in celsius
     pub fn read_temp(&mut self) -> Result<f32, E> {
         self.read_one(ReadValSingle::T)
