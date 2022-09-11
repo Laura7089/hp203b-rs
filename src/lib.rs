@@ -271,6 +271,15 @@ where
     I: I2c<Error = E>,
     C: csb::CSB,
 {
+    /// The maximum value that the pressure bounds on the altimeter can accept
+    pub const PRES_MAX: f32 = (u16::MAX as f32) / 0.02;
+
+    fn check_bound(bound: f32) {
+        assert!(bound.is_sign_positive());
+        assert!(bound <= Self::PRES_MAX,);
+        assert!(bound.is_normal());
+    }
+
     /// Initialise the device in pressure mode
     ///
     /// Actions carried out:
@@ -331,16 +340,17 @@ where
     ///
     /// # Panics
     ///
-    /// If `lower > upper`, or either are below 0.
+    /// - If `lower > upper`
+    /// - Either are not in the range `0`, [`Self::PRES_MAX`]
+    /// - Either are not "normal"; see [`f32::is_normal`]
     pub fn set_pres_bounds(&mut self, lower: f32, upper: f32) -> Result<(), E> {
         assert!(
             lower <= upper,
             "Lower bound {lower} is larger than upper bound {upper}",
         );
-        assert!(
-            lower.is_sign_positive() && upper.is_sign_positive(),
-            "Negative value passed(s): ({lower}, {upper})"
-        );
+        Self::check_bound(lower);
+        Self::check_bound(upper);
+
         self.write_reg16u(Register16::PA_L_TH_LS, (lower / 0.02) as u16)
             .and(self.write_reg16u(Register16::PA_H_TH_LS, (upper / 0.02) as u16))
     }
@@ -352,16 +362,23 @@ where
     ///
     /// # Panics
     ///
-    /// If `mid` < 0.
+    /// - `mid` is not in the range `0`, [`Self::PRES_MAX`]
+    /// - `mid` is not "normal"; see [`f32::is_normal`]
     pub fn set_pres_mid(&mut self, mid: f32) -> Result<(), E> {
         assert!(mid.is_sign_positive());
+        assert!(
+            mid <= Self::PRES_MAX,
+            "Value is {mid} above maximum {}",
+            Self::PRES_MAX
+        );
+
         self.write_reg16u(Register16::PA_M_TH_LS, (mid / 0.02) as u16)
     }
 
     /// Read both the temperature and pressure
     ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` and `PA_RDY`
-    /// flags.
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
+    /// and `PA_RDY` flags.
     pub fn read_pres_temp(&mut self) -> nb::Result<(f32, f32), E> {
         match (self.waiting_temp, self.waiting_baro) {
             (false, false) => self.command(Command::READ_PT)?,
@@ -455,8 +472,8 @@ where
 
     /// Read both the temperature and altitude
     ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` and `PA_RDY`
-    /// flags.
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
+    /// and `PA_RDY` flags.
     pub fn read_alti_temp(&mut self) -> nb::Result<(f32, f32), E> {
         match (self.waiting_temp, self.waiting_baro) {
             (false, false) => self.command(Command::READ_AT)?,
