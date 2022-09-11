@@ -2,15 +2,15 @@
 //!
 // TODO: make this runnable
 //! ```no_run
-//! alti.set_alti_mid(100)?;
+//! alti.set_pres_mid(100)?;
 //! alti.setup_interrupts(&[(Event::PATraversed, InterruptSetting::Enabled)])?;
 //!
-//! let _ = alti.read_bar(BaroMeasurement::Altitude)?;
+//! let _ = nb::block!(alti.read_pres())?;
 //!
 //! // Let's check if it moved across our midpoint
 //! for int in alti.interrupts()? {
 //!     if int == Event::PATraversed {
-//!         println!("The altitude reading crossed the midpoint!");
+//!         println!("The pressure reading crossed the midpoint!");
 //!     }
 //! }
 //! ```
@@ -167,9 +167,12 @@ pub trait HasInterrupts<E> {
 
     /// Configure the interrupts settings on the altimeter
     ///
-    /// Takes a slice of tuple pairs representing a mapping of
+    /// Takes an [`IntoIterator`] of tuple pairs representing a mapping of
     /// `interrupt_type`: `setting`.
-    fn setup_interrupts(&mut self, settings: &[(Event, InterruptSetting)]) -> Result<(), E>;
+    fn setup_interrupts<S: IntoIterator<Item = (Event, InterruptSetting)>>(
+        &mut self,
+        settings: S,
+    ) -> Result<(), E>;
 
     /// Check the traversal direction of the pressure/altitude measurement
     ///
@@ -232,11 +235,14 @@ where
         Ok(Interrupts::new(self.get_interrupts()?))
     }
 
-    fn setup_interrupts(&mut self, settings: &[(Event, InterruptSetting)]) -> Result<(), E> {
+    fn setup_interrupts<S: IntoIterator<Item = (Event, InterruptSetting)>>(
+        &mut self,
+        settings: S,
+    ) -> Result<(), E> {
         let mut enabled_flags = self.get_interrupts_enabled()?;
         let mut pinout_flags = self.get_interrupts_pinout()?;
 
-        for &(event, setting) in settings {
+        for (event, setting) in settings {
             let en_flag = event.into();
             let pinout_flag = event.into();
 

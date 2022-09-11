@@ -1,4 +1,23 @@
-//! To get started, create a [`HP203B`].
+//! To get started, create an [`HP203B`].
+//!
+//! ## Examples
+//!
+//! ```no_run
+//! use hp203b::{HP203B, csb::CSBLow, OSR, Channel};
+//! use nb::block;
+//!
+//! // ... initialise i2c device
+//!
+//! let altimeter = HP203B<_, _, CSBLow>::new(
+//!     i2c,
+//!     OSR::OSR1024,
+//!     Channel::SensorPressureTemperature,
+//! )?;
+//! let mut altimeter = altimeter.to_altitude()?;
+//! altimeter.set_offset(1000)?; // We're 1000m above sea level
+//! let alti = block!(altimeter.read_alti())?;
+//! println!("Altitude: {alti}m");
+//! ```
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -6,13 +25,12 @@
 #![allow(clippy::missing_errors_doc)]
 
 // TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
-// TODO: take a delay object when initialising so we can wait out the resets and similar?
 
 mod flags;
 pub mod interrupts;
 mod registers;
 
-use flags::{Flags, INT_CFG, INT_EN};
+use flags::{Flags, INT_CFG, INT_EN, INT_SRC};
 pub use registers::csb;
 use registers::{Register16, Register8, Registers};
 
@@ -32,6 +50,15 @@ pub mod mode {
 }
 
 /// A HOPERF HP203B altimeter/thermometer.
+///
+/// The type parameter `M` of this struct encodes whether the device shall be used to read altitude
+/// or pressure.
+/// Use [`Self::to_altitude`] and [`Self::to_pressure`] to switch between them.
+/// Note that [`Self::new`] returns the device set for pressure.
+///
+/// The type parameter `C` encodes whether the `CSB` pin on the device is set high or low.
+/// No direct mechanism for changing this is provided, on the assumption that the nature of the
+/// device's connection will not change during program runtime.
 pub struct HP203B<I, M = mode::Altitude, C = csb::CSBLow>
 where
     I: I2c,
@@ -39,6 +66,9 @@ where
     C: csb::CSB,
 {
     i2c: I,
+    waiting_baro: bool,
+    waiting_temp: bool,
+    waiting_reset: bool,
     _c: PhantomData<(C, M)>,
 }
 
@@ -87,6 +117,11 @@ enum Command {
     ANA_CAL = 0x28,
     READ_REG = 0x80,
     WRITE_REG = 0xC0,
+    READ_PT = 0x10,
+    READ_AT = 0x11,
+    READ_P = 0x30,
+    READ_A = 0x31,
+    READ_T = 0x32,
 }
 
 impl<I, E, M, C> HP203B<I, M, C>
@@ -107,9 +142,27 @@ where
     }
 
     /// Perform a software reset
-    pub fn reset(&mut self) -> Result<(), E> {
-        self.command(Command::SOFT_RST)
-        // TODO: sleep?
+    ///
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `DEV_RDY` flag.
+    ///
+    /// ### Note
+    ///
+    /// It is the caller's responsibility to ensure no other methods are called on the device until
+    /// this method returns `Ok(())`.
+    pub fn reset(&mut self) -> nb::Result<(), E> {
+        self.waiting_temp = false;
+        self.waiting_baro = false;
+        if !self.waiting_reset {
+            self.command(Command::SOFT_RST)?;
+            self.waiting_reset = true;
+        }
+
+        if !self.is_ready()? {
+            return Err(nb::Error::WouldBlock);
+        }
+
+        self.waiting_reset = false;
+        Ok(())
     }
 
     /// Check the "device ready" flag
@@ -158,22 +211,44 @@ where
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    /// Gets temperature in celsius
-    pub fn read_temp(&mut self) -> Result<f32, E> {
-        self.read_one(ReadValSingle::T)
+    /// Get temperature in celsius
+    ///
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` flag.
+    pub fn read_temp(&mut self) -> nb::Result<f32, E> {
+        if !self.waiting_temp {
+            self.command(Command::READ_T)?;
+            self.waiting_temp = true;
+        }
+        self.read_one(INT_SRC::T_RDY)
     }
 
-    fn read_one(&mut self, cmd: ReadValSingle) -> Result<f32, E> {
+    fn read_one(&mut self, ready: INT_SRC) -> nb::Result<f32, E> {
+        if !self.get_interrupts()?.contains(ready) {
+            return Err(nb::Error::WouldBlock);
+        }
+
         let mut raw = [0; 3];
-        // TODO: do we need to wait until the "read ready" flags are set
-        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
+        self.i2c.read(Self::ADDR, &mut raw)?;
+        match ready {
+            INT_SRC::PA_RDY => self.waiting_baro = false,
+            INT_SRC::T_RDY => self.waiting_temp = false,
+            _ => unreachable!(),
+        }
         Ok(raw_reading_to_float(&raw))
     }
 
-    fn read_two(&mut self, cmd: ReadValDouble) -> Result<(f32, f32), E> {
+    fn read_two(&mut self) -> nb::Result<(f32, f32), E> {
+        if !self
+            .get_interrupts()?
+            .contains(INT_SRC::PA_RDY & INT_SRC::T_RDY)
+        {
+            return Err(nb::Error::WouldBlock);
+        }
+
         let mut raw = [0; 6];
-        // TODO: do we need to wait until the "read ready" flags are set
-        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
+        self.i2c.read(Self::ADDR, &mut raw)?;
+        self.waiting_temp = false;
+        self.waiting_baro = false;
         Ok((
             raw_reading_to_float(&raw[0..3]),
             raw_reading_to_float(&raw[3..6]),
@@ -185,21 +260,6 @@ where
     }
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug)]
-enum ReadValDouble {
-    PT = 0x10,
-    AT = 0x11,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug)]
-enum ReadValSingle {
-    P = 0x30,
-    A = 0x31,
-    T = 0x32,
-}
-
 impl<I, E, C> HP203B<I, mode::Pressure, C>
 where
     I: I2c<Error = E>,
@@ -207,16 +267,21 @@ where
 {
     /// Initialise the device in pressure mode
     ///
-    /// Takes an I2C bus and settings for the onboard ADC
-    /// (see [`Self::osr_channel`]).
-    /// Resets the configuration registers.
+    /// Actions carried out:
+    ///
+    /// 1. Takes ownership of an I2C bus/device.
+    /// 1. Blocks on resetting the device with [`Self::reset`].
+    /// 1. Sets settings for the onboard ADC (see [`Self::osr_channel`]).
+    /// 1. Resets the configuration registers.
     pub fn new(i2c: I, osr: OSR, ch: Channel) -> Result<Self, E> {
         let mut new = Self {
             i2c,
             _c: PhantomData,
+            waiting_baro: false,
+            waiting_temp: false,
+            waiting_reset: false,
         };
-        new.reset()?;
-        // TODO: sleep?
+        nb::block!(new.reset())?;
         new.osr_channel(osr, ch)?;
         new.set_interrupts_enabled(INT_EN::from_bits_truncate(0))?;
         new.set_interrupts_pinout(INT_CFG::from_bits_truncate(0))?;
@@ -229,8 +294,11 @@ where
     /// [`interrupts::Event::PAOutsideWindow`]
     pub fn to_altitude(self) -> Result<HP203B<I, mode::Altitude, C>, E> {
         let mut new = HP203B::<_, mode::Altitude, _> {
-            i2c: self.destroy(),
             _c: PhantomData,
+            waiting_baro: false,
+            waiting_temp: self.waiting_temp,
+            waiting_reset: false,
+            i2c: self.destroy(),
         };
 
         new.set_alti_bounds(0, 0)?;
@@ -273,13 +341,32 @@ where
     }
 
     /// Read both the temperature and pressure
-    pub fn read_pres_temp(&mut self) -> Result<(f32, f32), E> {
-        self.read_two(ReadValDouble::PT)
+    ///
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` and `PA_RDY`
+    /// flags.
+    pub fn read_pres_temp(&mut self) -> nb::Result<(f32, f32), E> {
+        match (self.waiting_temp, self.waiting_baro) {
+            (false, false) => self.command(Command::READ_PT)?,
+            (true, false) => self.command(Command::READ_P)?,
+            (false, true) => self.command(Command::READ_T)?,
+            (true, true) => (),
+        }
+        self.waiting_temp = true;
+        self.waiting_baro = true;
+
+        self.read_two()
     }
 
     /// Read a pressure measurement
-    pub fn read_pres(&mut self) -> Result<f32, E> {
-        self.read_one(ReadValSingle::P)
+    ///
+    /// Returns [`nb::Result`] with `WouldBlock until the devices sets the `PA_RDY` flag.
+    pub fn read_pres(&mut self) -> nb::Result<f32, E> {
+        if !self.waiting_baro {
+            self.command(Command::READ_P)?;
+        }
+        self.waiting_baro = true;
+
+        self.read_one(INT_SRC::PA_RDY)
     }
 }
 
@@ -294,8 +381,11 @@ where
     /// [`interrupts::Event::PAOutsideWindow`]
     pub fn to_pressure(self) -> Result<HP203B<I, mode::Pressure, C>, E> {
         let mut new = HP203B::<_, mode::Pressure, _> {
-            i2c: self.destroy(),
             _c: PhantomData,
+            waiting_temp: self.waiting_temp,
+            waiting_baro: false,
+            waiting_reset: false,
+            i2c: self.destroy(),
         };
 
         new.set_pres_bounds(0.0, 0.0)?;
@@ -343,13 +433,31 @@ where
     }
 
     /// Read both the temperature and altitude
-    pub fn read_alti_temp(&mut self) -> Result<(f32, f32), E> {
-        self.read_two(ReadValDouble::AT)
+    ///
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` and `PA_RDY`
+    /// flags.
+    pub fn read_alti_temp(&mut self) -> nb::Result<(f32, f32), E> {
+        match (self.waiting_temp, self.waiting_baro) {
+            (false, false) => self.command(Command::READ_AT)?,
+            (true, false) => self.command(Command::READ_A)?,
+            (false, true) => self.command(Command::READ_T)?,
+            (true, true) => (),
+        }
+        self.waiting_temp = true;
+        self.waiting_baro = true;
+
+        self.read_two()
     }
 
     /// Read an altitude measurement
-    pub fn read_alti(&mut self) -> Result<f32, E> {
-        self.read_one(ReadValSingle::A)
+    ///
+    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `PA_RDY` flag.
+    pub fn read_alti(&mut self) -> nb::Result<f32, E> {
+        if !self.waiting_baro {
+            self.command(Command::READ_A)?
+        }
+
+        self.read_one(INT_SRC::PA_RDY)
     }
 }
 
