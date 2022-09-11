@@ -23,8 +23,10 @@
 #![deny(missing_docs)]
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
+#![allow(clippy::enum_glob_use)]
 
 // TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
+// TODO: remove user access to the `*_RDY` interrupts?
 
 mod flags;
 pub mod interrupts;
@@ -145,7 +147,7 @@ where
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `DEV_RDY` flag.
     ///
-    /// ### Note
+    /// # Note
     ///
     /// It is the caller's responsibility to ensure no other methods are called on the device until
     /// this method returns `Ok(())`.
@@ -175,11 +177,14 @@ where
     /// Units are in degrees celsius.
     /// Used by the [`interrupts::Event::TemperatureOutsideWindow`] interrupt.
     ///
-    /// Panics if `lower > upper`.
+    /// # Panics
+    ///
+    /// If `lower > upper`.
     pub fn set_temp_bounds(&mut self, lower: i8, upper: i8) -> Result<(), E> {
-        if lower > upper {
-            panic!("Lower bound {lower} is larger than upper bound {upper}",);
-        }
+        assert!(
+            lower <= upper,
+            "Lower bound {lower} is larger than upper bound {upper}",
+        );
         self.write_reg8(Register8::T_L_TH, lower)
             .and(self.write_reg8(Register8::T_H_TH, upper))
     }
@@ -199,9 +204,10 @@ where
 
     /// Enable or disable compensation
     pub fn compensate(&mut self, comp: bool) -> Result<(), E> {
-        let flag = match comp {
-            true => flags::PARA::CMPS_EN,
-            false => flags::PARA::empty(),
+        let flag = if comp {
+            flags::PARA::CMPS_EN
+        } else {
+            flags::PARA::empty()
         };
         self.set_para(flag)
     }
@@ -323,11 +329,18 @@ where
     /// Units are in mbar.
     /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
     ///
-    /// Panics if `lower > upper`.
+    /// # Panics
+    ///
+    /// If `lower > upper`, or either are below 0.
     pub fn set_pres_bounds(&mut self, lower: f32, upper: f32) -> Result<(), E> {
-        if lower > upper {
-            panic!("Lower bound {lower} is larger than upper bound {upper}",);
-        }
+        assert!(
+            lower <= upper,
+            "Lower bound {lower} is larger than upper bound {upper}",
+        );
+        assert!(
+            lower.is_sign_positive() && upper.is_sign_positive(),
+            "Negative value passed(s): ({lower}, {upper})"
+        );
         self.write_reg16u(Register16::PA_L_TH_LS, (lower / 0.02) as u16)
             .and(self.write_reg16u(Register16::PA_H_TH_LS, (upper / 0.02) as u16))
     }
@@ -336,7 +349,12 @@ where
     ///
     /// Units are in mbar.
     /// Used by the [`interrupts::Event::PATraversed`] interrupt.
+    ///
+    /// # Panics
+    ///
+    /// If `mid` < 0.
     pub fn set_pres_mid(&mut self, mid: f32) -> Result<(), E> {
+        assert!(mid.is_sign_positive());
         self.write_reg16u(Register16::PA_M_TH_LS, (mid / 0.02) as u16)
     }
 
@@ -359,7 +377,7 @@ where
 
     /// Read a pressure measurement
     ///
-    /// Returns [`nb::Result`] with `WouldBlock until the devices sets the `PA_RDY` flag.
+    /// Returns [`nb::Result`] with `WouldBlock` until the devices sets the `PA_RDY` flag.
     pub fn read_pres(&mut self) -> nb::Result<f32, E> {
         if !self.waiting_baro {
             self.command(Command::READ_P)?;
@@ -415,11 +433,14 @@ where
     /// Units are in metres.
     /// Used by the [`interrupts::Event::PAOutsideWindow`] interrupt.
     ///
-    /// Panics if `lower > upper`.
+    /// # Panics
+    ///
+    /// If `lower > upper`.
     pub fn set_alti_bounds(&mut self, lower: i16, upper: i16) -> Result<(), E> {
-        if lower > upper {
-            panic!("Lower bound {lower} is larger than upper bound {upper}",);
-        }
+        assert!(
+            lower <= upper,
+            "Lower bound {lower} is larger than upper bound {upper}",
+        );
         self.write_reg16s(Register16::PA_L_TH_LS, lower)
             .and(self.write_reg16s(Register16::PA_H_TH_LS, upper))
     }
@@ -454,7 +475,7 @@ where
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `PA_RDY` flag.
     pub fn read_alti(&mut self) -> nb::Result<f32, E> {
         if !self.waiting_baro {
-            self.command(Command::READ_A)?
+            self.command(Command::READ_A)?;
         }
 
         self.read_one(INT_SRC::PA_RDY)

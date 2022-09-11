@@ -1,5 +1,9 @@
 //! Types and methods for configuring and receiving interrupts on the altimeter
 //!
+//! The [`HasInterrupts`] trait is the place to start here - it contains all the fancy methods for
+//! getting and configuring the interrupts from the device.
+//!
+//! ## Example
 // TODO: make this runnable
 //! ```no_run
 //! alti.set_pres_mid(100)?;
@@ -15,7 +19,7 @@
 //! }
 //! ```
 //!
-//! ### Note: `INT1` pin
+//! ## Note: `INT1` pin
 //!
 //! This crate does not have any mechanism for dealing with the interrupt pin from the altimeter, defined as `INT1` in the datasheet.
 //! You must watch that pin yourself, and call [`HP203B::interrupts`] and related functions as
@@ -47,6 +51,7 @@ pub enum Event {
     TemperatureOutsideWindow,
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<flags::INT_EN> for Event {
     fn into(self) -> flags::INT_EN {
         use Event::*;
@@ -62,6 +67,7 @@ impl Into<flags::INT_EN> for Event {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<flags::INT_CFG> for Event {
     fn into(self) -> flags::INT_CFG {
         use Event::*;
@@ -158,6 +164,7 @@ impl Iterator for Interrupts {
 impl FusedIterator for Interrupts {}
 
 /// Interrupt-related methods on the altimeter
+#[allow(clippy::module_name_repetitions)]
 pub trait HasInterrupts<E> {
     /// Get the [`Interrupts`] set
     fn interrupts(&mut self) -> Result<Interrupts, E>;
@@ -179,7 +186,7 @@ pub trait HasInterrupts<E> {
     /// Only relevant to [`Event::PATraversed`].
     /// If this isn't enabled on the chip, returns `Ok(None)`.
     ///
-    /// ### Note
+    /// # Note
     ///
     /// TODO: is this true?
     ///
@@ -192,7 +199,7 @@ pub trait HasInterrupts<E> {
     /// Only relevant to [`Event::PATraversed`].
     /// If this isn't enabled on the chip, returns `Ok(None)`.
     ///
-    /// ### Note
+    /// # Note
     ///
     /// TODO: is this true?
     ///
@@ -204,7 +211,7 @@ pub trait HasInterrupts<E> {
     /// Only relevant to [`Event::PAOutsideWindow`].
     /// If this isn't enabled on the chip, returns `Ok(None)`.
     ///
-    /// ### Note
+    /// # Note
     ///
     /// TODO: is this true?
     ///
@@ -217,7 +224,7 @@ pub trait HasInterrupts<E> {
     /// Only relevant to [`Event::TemperatureOutsideWindow`].
     /// If this isn't enabled on the chip, returns `Ok(None)`.
     ///
-    /// ### Note
+    /// # Note
     ///
     /// TODO: is this true?
     ///

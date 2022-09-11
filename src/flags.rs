@@ -2,6 +2,7 @@ use bitflags::bitflags;
 use embedded_hal::i2c::blocking::I2c;
 
 #[allow(non_camel_case_types)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug)]
 pub enum FlagRegister {
     /// Enable or disable interrupts
