@@ -32,13 +32,13 @@ pub mod mode {
 }
 
 /// A HOPERF HP203B altimeter/thermometer.
-pub struct HP203B<I2C, M = mode::Altitude, C = csb::CSBLow>
+pub struct HP203B<I, M = mode::Altitude, C = csb::CSBLow>
 where
-    I2C: I2c,
+    I: I2c,
     M: mode::BarometricMeasurement,
     C: csb::CSB,
 {
-    i2c: I2C,
+    i2c: I,
     _c: PhantomData<(C, M)>,
 }
 
@@ -57,17 +57,17 @@ where
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OSR {
     /// Decimeation rate = 4096
-    OSR4096 = 0b000,
+    OSR4096 = 0b0_0000,
     /// Decimeation rate = 2048
-    OSR2048 = 0b001,
+    OSR2048 = 0b0_0100,
     /// Decimeation rate = 1024
-    OSR1024 = 0b010,
+    OSR1024 = 0b0_1000,
     /// Decimeation rate = 512
-    OSR512 = 0b011,
+    OSR512 = 0b0_1100,
     /// Decimeation rate = 256
-    OSR256 = 0b100,
+    OSR256 = 0b1_0000,
     /// Decimeation rate = 128
-    OSR128 = 0b101,
+    OSR128 = 0b1_0100,
 }
 
 /// Which data to convert with internal ADC
@@ -89,24 +89,22 @@ enum Command {
     WRITE_REG = 0xC0,
 }
 
-impl<I2C, E, M, C> HP203B<I2C, M, C>
+impl<I, E, M, C> HP203B<I, M, C>
 where
-    I2C: I2c<Error = E>,
+    I: I2c<Error = E>,
     M: mode::BarometricMeasurement,
     C: csb::CSB,
-    HP203B<I2C, M, C>: Registers<I2C>,
+    HP203B<I, M, C>: Registers<I>,
 {
     /// Destroy the sensor struct and yield the I2C device it held
-    pub fn destroy(self) -> I2C {
+    pub fn destroy(self) -> I {
         self.i2c
     }
 
     /// Set the decimation rate of the filter and the channel to perform ADC on
     pub fn osr_channel(&mut self, osr: OSR, ch: Channel) -> Result<(), E> {
-        self.i2c.write(
-            Self::ADDR,
-            &[Command::ADC_CVT as u8 + ((osr as u8) << 2) + ch as u8],
-        )
+        let command = Command::ADC_CVT as u8 & osr as u8 & ch as u8;
+        self.i2c.write(Self::ADDR, &[command])
     }
 
     /// Perform a software reset
@@ -168,12 +166,14 @@ where
 
     fn read_one(&mut self, cmd: ReadValSingle) -> Result<f32, E> {
         let mut raw = [0; 3];
+        // TODO: do we need to wait until the "read ready" flags are set
         self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
         Ok(raw_reading_to_float(&raw))
     }
 
     fn read_two(&mut self, cmd: ReadValDouble) -> Result<(f32, f32), E> {
         let mut raw = [0; 6];
+        // TODO: do we need to wait until the "read ready" flags are set
         self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
         Ok((
             raw_reading_to_float(&raw[0..3]),
@@ -207,6 +207,24 @@ where
     C: csb::CSB,
     HP203B<I, mode::Pressure, C>: Registers<I>,
 {
+    /// Initialise the device in pressure mode
+    ///
+    /// Takes an I2C bus and settings for the onboard ADC
+    /// (see [`Self::osr_channel`]).
+    /// Resets the configuration registers.
+    pub fn new(i2c: I, osr: OSR, ch: Channel) -> Result<Self, E> {
+        let mut new = Self {
+            i2c,
+            _c: PhantomData,
+        };
+        new.reset()?;
+        // TODO: sleep?
+        new.osr_channel(osr, ch)?;
+        new.set_interrupts_enabled(INT_EN::from_bits_truncate(0))?;
+        new.set_interrupts_pinout(INT_CFG::from_bits_truncate(0))?;
+        Ok(new)
+    }
+
     /// Convert the altimeter to read altitude
     ///
     /// Note that this resets the interrupt flags for [`interrupts::Event::PATraversed`] and
@@ -267,35 +285,17 @@ where
     }
 }
 
-impl<I2C, E, C> HP203B<I2C, mode::Altitude, C>
+impl<I, E, C> HP203B<I, mode::Altitude, C>
 where
-    I2C: I2c<Error = E>,
+    I: I2c<Error = E>,
     C: csb::CSB,
-    HP203B<I2C, mode::Altitude, C>: Registers<I2C>,
+    HP203B<I, mode::Altitude, C>: Registers<I>,
 {
-    /// Initialise the device in altitude mode
-    ///
-    /// Takes an I2C bus and settings for the onboard ADC
-    /// (see [`Self::osr_channel`]).
-    /// Resets the configuration registers.
-    pub fn new(i2c: I2C, osr: OSR, ch: Channel) -> Result<Self, E> {
-        let mut new = Self {
-            i2c,
-            _c: PhantomData,
-        };
-        new.reset()?;
-        // TODO: sleep?
-        new.osr_channel(osr, ch)?;
-        new.set_interrupts_enabled(INT_EN::from_bits_truncate(0))?;
-        new.set_interrupts_pinout(INT_CFG::PA_MODE)?;
-        Ok(new)
-    }
-
     /// Convert the altimeter to read pressure
     ///
     /// Note that this resets the interrupt flags for [`interrupts::Event::PATraversed`] and
     /// [`interrupts::Event::PAOutsideWindow`]
-    pub fn to_pressure(self) -> Result<HP203B<I2C, mode::Pressure, C>, E> {
+    pub fn to_pressure(self) -> Result<HP203B<I, mode::Pressure, C>, E> {
         let mut new = HP203B::<_, mode::Pressure, _> {
             i2c: self.destroy(),
             _c: PhantomData,
