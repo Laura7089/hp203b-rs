@@ -38,14 +38,13 @@ mod flags;
 pub mod interrupts;
 mod registers;
 
-use defmt::info;
 use flags::{Flags, INT_CFG, INT_EN, INT_SRC};
 pub use registers::csb;
 use registers::{Register16, Register8, Registers};
 
 use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
-use defmt::{assert, debug, trace};
+use defmt::{assert, debug, info, trace};
 use embedded_hal::i2c::blocking::I2c;
 
 /// Mode-setting for the altimeter
