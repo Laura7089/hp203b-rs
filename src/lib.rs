@@ -94,7 +94,6 @@ where
     I: I2c<Error = E>,
     M: mode::BarometricMeasurement,
     C: csb::CSB,
-    HP203B<I, M, C>: Registers<I>,
 {
     /// Destroy the sensor struct and yield the I2C device it held
     pub fn destroy(self) -> I {
@@ -205,7 +204,6 @@ impl<I, E, C> HP203B<I, mode::Pressure, C>
 where
     I: I2c<Error = E>,
     C: csb::CSB,
-    HP203B<I, mode::Pressure, C>: Registers<I>,
 {
     /// Initialise the device in pressure mode
     ///
@@ -289,7 +287,6 @@ impl<I, E, C> HP203B<I, mode::Altitude, C>
 where
     I: I2c<Error = E>,
     C: csb::CSB,
-    HP203B<I, mode::Altitude, C>: Registers<I>,
 {
     /// Convert the altimeter to read pressure
     ///
