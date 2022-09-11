@@ -2,21 +2,24 @@
 //!
 //! ## Examples
 //!
-//! ```no_run
+//! ```ignore
 //! use hp203b::{HP203B, csb::CSBLow, OSR, Channel};
-//! use nb::block;
+//! # fn main() -> Result<(), _> {
 //!
 //! // ... initialise i2c device
+//! # let i2c = todo!();
 //!
-//! let altimeter = HP203B<_, _, CSBLow>::new(
+//! let altimeter = HP203B::<_, _, CSBLow>::new(
 //!     i2c,
 //!     OSR::OSR1024,
 //!     Channel::SensorPressureTemperature,
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
-//! let alti = block!(altimeter.read_alti())?;
+//! let alti = nb::block!(altimeter.read_alti())?;
 //! println!("Altitude: {alti}m");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Features
@@ -33,6 +36,7 @@
 
 // TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
 // TODO: remove user access to the `*_RDY` interrupts?
+// TODO: allow `no_run` tests to be run, use `embedded-hal-mock`?
 
 mod flags;
 pub mod interrupts;

@@ -5,9 +5,17 @@
 //!
 //! ## Example
 // TODO: make this runnable
-//! ```no_run
-//! alti.set_pres_mid(100)?;
-//! alti.setup_interrupts(&[(Event::PATraversed, InterruptSetting::Enabled)])?;
+//! ```ignore
+//! # fn main() -> Result<(), _> {
+//! # let mut alti = hp203b::HP203B::new(
+//! #     todo!(),
+//! #     hp203b::OSR::OSR128,
+//! #     hp203b::Channel::Temperature,
+//! # )?;
+//! use hp203b::interrupts::{Event, HasInterrupts, InterruptSetting};
+//!
+//! alti.set_pres_mid(100.0)?;
+//! alti.setup_interrupts([(Event::PATraversed, InterruptSetting::Enabled)])?;
 //!
 //! let _ = nb::block!(alti.read_pres())?;
 //!
@@ -17,6 +25,8 @@
 //!         println!("The pressure reading crossed the midpoint!");
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Note: `INT1` pin
@@ -116,9 +126,17 @@ pub enum TraversalDirection {
     Falling,
 }
 
-// TODO: allow doctest to be run
 /// An [`Iterator`] over interrupts ([`Event`]s) set on the device
-/// ```no_run
+/// ```ignore
+/// use hp203b::interrupts::{Event, HasInterrupts};
+///
+/// # fn main() -> Result<(), _> {
+/// # let mut alti = hp203b::HP203B::new(
+/// #     todo!(),
+/// #     hp203b::OSR::OSR128,
+/// #     hp203b::Channel::Temperature,
+/// # )?;
+///
 /// for event in alti.interrupts()? {
 ///     match event {
 ///         Event::PAReady => {
@@ -128,6 +146,8 @@ pub enum TraversalDirection {
 ///         _ => continue,
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone)]
 pub struct Interrupts(flags::INT_SRC);
