@@ -318,6 +318,8 @@ where
     /// The maximum value that the pressure bounds on the altimeter can accept
     pub const PRES_MAX: f32 = (u16::MAX as f32) / 0.02;
 
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
     fn bound_to_dev_int(bound: f32) -> u16 {
         assert!(bound.is_sign_positive());
         assert!(bound <= Self::PRES_MAX,);
