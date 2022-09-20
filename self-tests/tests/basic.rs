@@ -76,10 +76,10 @@ mod tests {
             Channel::SensorPressureTemperature,
         )
         .unwrap();
-        info!(
-            "Pressure reading: {}Pa",
-            nb::block!(alti.read_pres()).unwrap()
-        );
+        let pres = nb::block!(alti.read_pres()).unwrap();
+        info!("Pressure reading: {}Pa", pres);
+
+        assert!(pres > 0.0);
     }
 
     #[test]
