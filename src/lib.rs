@@ -153,7 +153,7 @@ where
     pub fn osr_channel(&mut self, osr: OSR, ch: Channel) -> Result<(), E> {
         #[cfg(feature = "defmt")]
         debug!("Setting {} and {}", osr, ch);
-        let command = Command::ADC_CVT as u8 & osr as u8 & ch as u8;
+        let command = Command::ADC_CVT as u8 + osr as u8 + ch as u8;
         self.i2c.write(Self::ADDR, &[command])
     }
 
@@ -348,7 +348,7 @@ where
         };
         nb::block!(new.reset())?;
         new.osr_channel(osr, ch)?;
-        new.set_interrupts_enabled(INT_EN::from_bits_truncate(0))?;
+        new.set_interrupts_enabled(INT_EN::RDY_EN)?;
         new.set_interrupts_pinout(INT_CFG::from_bits_truncate(0))?;
         #[cfg(feature = "defmt")]
         info!("HP203B altimeter object created and configured");

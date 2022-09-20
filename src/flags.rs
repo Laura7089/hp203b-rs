@@ -61,6 +61,7 @@ bitflags! {
     pub struct INT_EN: u8 {
         const PA_RDY_EN = 0b0010_0000;
         const T_RDY_EN = 0b0001_0000;
+        const RDY_EN = Self::PA_RDY_EN.bits | Self::T_RDY_EN.bits;
         const PA_TRAV_EN = 0b0000_1000;
         const T_TRAV_EN = 0b0000_0100;
         const PA_WIN_EN = 0b0000_0010;

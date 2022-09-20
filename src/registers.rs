@@ -1,5 +1,5 @@
 use crate::{Command, HP203B};
-use embedded_hal::i2c::blocking::{I2c, Operation};
+use embedded_hal::i2c::blocking::I2c;
 
 /// Configure the I2C address select pin
 pub mod csb {
@@ -80,10 +80,7 @@ pub trait Registers<I: I2c> {
         let mut val = [0];
 
         let to_write = [Command::READ_REG as u8 + regaddr];
-        self.i2c().transaction(
-            Self::ADDR,
-            &mut [Operation::Write(&to_write), Operation::Read(&mut val)],
-        )?;
+        self.i2c().write_read(Self::ADDR, &to_write, &mut val)?;
         Ok(val[0])
     }
 

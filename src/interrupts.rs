@@ -41,12 +41,10 @@ use crate::flags::{self, Flags, INT_CFG, INT_DIR, INT_EN};
 use crate::HP203B;
 
 /// An interrupt-based event sent by the Altimeter
+// TODO: allow users to set pinout on the *_RDY flags, but not disable them entirely -
+// alternatively, type-model whether they're enabled (will make very verbose)
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Event {
-    /// The pressure (or altitude) measurement is done and the result is ready to read
-    PAReady,
-    /// The temperature measurement is done and the result is ready to read
-    TemperatureReady,
     /// The pressure (or altitude) value has traversed the middle threshold during the last measurement
     PATraversed,
     /// The temperature value has traversed the middle threshold during the last measurement
@@ -67,8 +65,6 @@ impl Into<flags::INT_EN> for Event {
         use Event::*;
 
         match self {
-            PAReady => INT_EN::PA_RDY_EN,
-            TemperatureReady => INT_EN::T_RDY_EN,
             PATraversed => INT_EN::PA_TRAV_EN,
             TemperatureTraversed => INT_EN::T_TRAV_EN,
             PAOutsideWindow => INT_EN::PA_WIN_EN,
@@ -83,8 +79,6 @@ impl Into<flags::INT_CFG> for Event {
         use Event::*;
 
         match self {
-            PAReady => INT_CFG::PA_RDY_CFG,
-            TemperatureReady => INT_CFG::T_RDY_CFG,
             PATraversed => INT_CFG::PA_TRAV_CFG,
             TemperatureTraversed => INT_CFG::T_TRAV_CFG,
             PAOutsideWindow => INT_CFG::PA_WIN_CFG,
@@ -168,10 +162,8 @@ impl Iterator for Interrupts {
             if self.0.contains(flag) {
                 self.0.remove(flag);
                 return Some(match flag {
-                    INT_SRC::PA_RDY => Event::PAReady,
                     INT_SRC::PA_TRAV => Event::PATraversed,
                     INT_SRC::PA_WIN => Event::PAOutsideWindow,
-                    INT_SRC::T_RDY => Event::TemperatureReady,
                     INT_SRC::T_TRAV => Event::TemperatureTraversed,
                     INT_SRC::T_WIN => Event::TemperatureOutsideWindow,
                     _ => continue,
