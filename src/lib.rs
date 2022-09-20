@@ -26,7 +26,7 @@
 //!
 //! The `defmt` feature provides logging of various levels with the
 //! [`defmt`](https://defmt.ferrous-systems.com/introduction.html) crate.
-//! **It is enabled by default**.
+//! It is disabled by default.
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
