@@ -20,5 +20,5 @@ test-case = "2.2.1"
 embedded-hal-mock = { git = "https://github.com/dbrgn/embedded-hal-mock", branch = "1-alpha" }
 
 [features]
-default = ["defmt"]
+default = []
 defmt = ["dep:defmt"]

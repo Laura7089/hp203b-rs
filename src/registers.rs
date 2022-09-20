@@ -15,10 +15,10 @@ pub mod csb {
     #[derive(Copy, Clone, Debug)]
     pub struct CSBLow;
     impl CSB for CSBHigh {
-        const ADDR: u8 = 0xED;
+        const ADDR: u8 = 0xED >> 1;
     }
     impl CSB for CSBLow {
-        const ADDR: u8 = 0xEF;
+        const ADDR: u8 = 0xEF >> 1;
     }
 }
 
