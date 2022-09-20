@@ -93,7 +93,7 @@ mod tests {
         .to_altitude()
         .unwrap();
         info!(
-            "Pressure reading: {}Pa",
+            "Altitude reading: {}m",
             nb::block!(alti.read_alti()).unwrap()
         );
     }

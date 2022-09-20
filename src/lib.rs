@@ -48,7 +48,7 @@ use registers::{Register16, Register8, Registers};
 
 use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
-use defmt::{assert, debug, info, trace};
+use defmt::{assert, debug, error, info, trace};
 use embedded_hal::i2c::blocking::I2c;
 
 /// Mode-setting for the altimeter
@@ -99,6 +99,7 @@ where
 /// 2048 | 32.8 | 65.6
 /// 4096 | 65.6 | 131.1
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum OSR {
     /// Decimeation rate = 4096
     OSR4096 = 0b0_0000,
@@ -116,6 +117,7 @@ pub enum OSR {
 
 /// Which data to convert with internal ADC
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Channel {
     /// Convert Pressure/Altitude *and* temperature
     SensorPressureTemperature = 0b00,
@@ -125,6 +127,7 @@ pub enum Channel {
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum Command {
     SOFT_RST = 0x06,
     ADC_CVT = 0x40,
@@ -452,7 +455,13 @@ where
         self.waiting_temp = true;
         self.waiting_baro = true;
 
-        self.read_two()
+        let (pres, temp) = self.read_two()?;
+
+        #[cfg(feature = "defmt")]
+        if pres < 0.0 {
+            error!("Pressure reading below zero: {}Pa", pres);
+        }
+        Ok((pres, temp))
     }
 
     /// Read a pressure measurement
@@ -467,7 +476,14 @@ where
         }
         self.waiting_baro = true;
 
-        self.read_one(INT_SRC::PA_RDY)
+        let pres = self.read_one(INT_SRC::PA_RDY)?;
+
+        #[cfg(feature = "defmt")]
+        if pres < 0.0 {
+            error!("Pressure reading below zero: {}Pa", pres);
+        }
+
+        Ok(pres)
     }
 }
 

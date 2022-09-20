@@ -36,6 +36,7 @@ pub(crate) const INT_SRC_VARIANTS: [INT_SRC; 6] = [
 bitflags! {
     /// Flags in [`Register8::INT_SRC`]
     #[allow(non_camel_case_types)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct INT_SRC: u8 {
         const TH_ERR = 0b1000_0000;
         /// Device ready bit
@@ -108,6 +109,7 @@ bitflags! {
     }
 
     #[allow(non_camel_case_types)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct PARA: u8 {
         const CMPS_EN = 0b1000_0000;
     }
