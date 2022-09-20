@@ -239,6 +239,7 @@ version = "0.3.0-pre.1"
 dependencies = [
  "bitflags",
  "bytemuck",
+ "defmt",
  "embedded-hal 1.0.0-alpha.8",
  "nb 1.0.0",
 ]
