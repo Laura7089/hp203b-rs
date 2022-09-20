@@ -18,13 +18,14 @@ fugit = { version = "0.3.6", features = ["defmt"] }
 hp203b = { path = ".." }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 rp2040-hal = { version = "0.6.0", features = ["defmt", "eh1_0_alpha"] }
+rp2040-boot2 = { version = "0.2" }
+cortex-m-rt = "0.7.1"
 
 [features]
 # set logging levels here
 default = [
   # in tests, enable all logs
   "defmt-trace",
-  # "dependency-a/defmt-trace",
 ]
 
 # do NOT modify these features

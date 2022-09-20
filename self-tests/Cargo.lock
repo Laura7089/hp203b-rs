@@ -95,6 +95,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc-any"
+version = "2.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "774646b687f63643eb0f4bf13dc263cb581c8c9e57973b6ddf78bda3994d88df"
+dependencies = [
+ "debug-helper",
+]
+
+[[package]]
 name = "critical-section"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -111,6 +120,12 @@ name = "critical-section"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d02ba51481d019be9c74a831d1133c364d78831b75c833478f3a21e1fd91e01a"
+
+[[package]]
+name = "debug-helper"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f578e8e2c440e7297e008bb5486a3a8a194775224bbc23729b0dbdfaeebf162e"
 
 [[package]]
 name = "defmt"
@@ -224,7 +239,6 @@ version = "0.3.0-pre.1"
 dependencies = [
  "bitflags",
  "bytemuck",
- "defmt",
  "embedded-hal 1.0.0-alpha.8",
  "nb 1.0.0",
 ]
@@ -399,6 +413,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rp2040-boot2"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c773ec49b836077aa144b58dc7654a243e1eecdb6cf0d25361ae7c7600fabd8"
+dependencies = [
+ "crc-any",
+]
+
+[[package]]
 name = "rp2040-hal"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -459,12 +482,14 @@ dependencies = [
 name = "self-tests"
 version = "0.1.0"
 dependencies = [
+ "cortex-m-rt",
  "defmt",
  "defmt-rtt",
  "defmt-test",
  "fugit",
  "hp203b",
  "panic-probe",
+ "rp2040-boot2",
  "rp2040-hal",
 ]
 

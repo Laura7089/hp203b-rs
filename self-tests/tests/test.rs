@@ -13,6 +13,7 @@ mod tests {
     use hal::{gpio, i2c, pac};
     use rp2040_hal as hal;
 
+    #[allow(unused_imports)]
     use hp203b::interrupts::HasInterrupts;
     use hp203b::{Channel, OSR};
 
