@@ -56,6 +56,7 @@ mod tests {
     #[test]
     fn make_new() {
         let _: HP203B<hp203b::mode::Pressure> =
-            HP203B::new(setup(), OSR::OSR128, Channel::SensorPressureTemperature).unwrap();
+            HP203B::new(setup(), OSR::OSR128, Channel::SensorPressureTemperature)
+                .expect("HP203B::new returned an error");
     }
 }
