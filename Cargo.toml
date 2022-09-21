@@ -25,4 +25,4 @@ default = []
 defmt = ["dep:defmt"]
 
 [[test]]
-name = "basic"
+name = "basic-mocks"
