@@ -5,14 +5,16 @@
 //!
 //! ## Example
 // TODO: make this runnable
-//! ```ignore
-//! # fn main() -> Result<(), _> {
-//! # let mut alti = hp203b::HP203B::new(
-//! #     todo!(),
-//! #     hp203b::OSR::OSR128,
-//! #     hp203b::Channel::Temperature,
-//! # )?;
+//! ```no_run
 //! use hp203b::interrupts::{Event, HasInterrupts, InterruptSetting};
+//! # use hp203b::{HP203B, OSR, Channel};
+//! # use embedded_hal_mock::i2c::Mock;
+//! # fn main() -> Result<(), embedded_hal::i2c::ErrorKind> {
+//! # let mut alti: HP203B<_, _, hp203b::csb::CSBLow> = HP203B::new(
+//! #     Mock::new(&[]),
+//! #     OSR::OSR128,
+//! #     Channel::Temperature,
+//! # )?;
 //!
 //! alti.set_pres_mid(100.0)?;
 //! alti.setup_interrupts([(Event::PATraversed, InterruptSetting::Enabled)])?;
@@ -121,19 +123,22 @@ pub enum TraversalDirection {
 }
 
 /// An [`Iterator`] over interrupts ([`Event`]s) set on the device
-/// ```ignore
+/// ```no_run
 /// use hp203b::interrupts::{Event, HasInterrupts};
+/// use hp203b::HP203B;
 ///
-/// # fn main() -> Result<(), _> {
-/// # let mut alti = hp203b::HP203B::new(
-/// #     todo!(),
-/// #     hp203b::OSR::OSR128,
-/// #     hp203b::Channel::Temperature,
+/// # use hp203b::{csb::{CSBLow, CSB}, OSR, Channel};
+/// # use embedded_hal_mock::i2c::{Mock, Transaction as Tr};
+/// # fn main() -> Result<(), embedded_hal::i2c::ErrorKind> {
+/// # let mut alti: HP203B<_, _, CSBLow> = HP203B::new(
+/// #   Mock::new(&[]),
+/// #   OSR::OSR128,
+/// #   Channel::Temperature,
 /// # )?;
 ///
 /// for event in alti.interrupts()? {
 ///     match event {
-///         Event::PAReady => {
+///         Event::PATraversed => {
 ///             // Do something
 ///         },
 ///         // ...

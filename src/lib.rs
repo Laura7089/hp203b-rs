@@ -2,12 +2,14 @@
 //!
 //! ## Examples
 //!
-//! ```ignore
+//! ```no_run
 //! use hp203b::{HP203B, csb::CSBLow, OSR, Channel};
-//! # fn main() -> Result<(), _> {
+//! # use embedded_hal::i2c::ErrorKind;
+//! # use embedded_hal_mock::i2c::Mock;
+//! # fn main() -> Result<(), ErrorKind> {
 //!
 //! // ... initialise i2c device
-//! # let i2c = todo!();
+//! # let i2c = Mock::new(&[]);
 //!
 //! let altimeter = HP203B::<_, _, CSBLow>::new(
 //!     i2c,
@@ -617,7 +619,10 @@ fn raw_reading_to_float(reading: &[u8]) -> f32 {
             + (i32::from(reading[1]) << 8)
             + i32::from(reading[0])
     };
-    signed as f32 / 100.0
+    let res = signed as f32 / 100.0;
+    #[cfg(feature = "defmt")]
+    trace!("Converted raw output {} to float {}", reading, res);
+    res
 }
 
 // TODO: more tests
