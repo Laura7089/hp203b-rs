@@ -10,17 +10,16 @@ type HP203B<M> = hp203b::HP203B<Mock, M, csb::CSBLow>;
 
 const OSR: hp203b::OSR = hp203b::OSR::OSR1024;
 const CHAN: hp203b::Channel = hp203b::Channel::SensorPressureTemperature;
-static NEW: Lazy<[Tr; 5]> = Lazy::new(|| {
+static NEW: Lazy<[Tr; 4]> = Lazy::new(|| {
     [
-        Tr::write(csb::CSBLow::ADDR, vec![0x06]), // SOFT_RST
+        // SOFT_RST
+        Tr::write(csb::CSBLow::ADDR, vec![0x06]),
         // Check Ready
         Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0100_0000]),
         // Set OSR and channel
         Tr::write(csb::CSBLow::ADDR, vec![0x40 + OSR as u8 + CHAN as u8]),
-        // Disable all interrupts
+        // Disable all interrupts except the *_RDY ones
         Tr::write(csb::CSBLow::ADDR, vec![0xc0 + 0x0b, 0b0011_0000]),
-        // Disable all interrupt pinout
-        Tr::write(csb::CSBLow::ADDR, vec![0xc0 + 0x0c, 0]),
     ]
 });
 
@@ -31,10 +30,21 @@ static READ_PRES: Lazy<[Tr; 3]> = Lazy::new(|| {
         // Check pressure is ready
         Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
         // Read pressure
-        Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
+        Tr::read(csb::CSBLow::ADDR, vec![0x5C, 0x0A, 0x00]),
     ]
 });
 const PRES_VAL: f32 = 26.52;
+
+static READ_ALTI: Lazy<[Tr; 3]> = Lazy::new(|| {
+    [
+        // READ_A
+        Tr::write(csb::CSBLow::ADDR, vec![0x31]),
+        // Check pressure is ready
+        Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
+        // Read pressure
+        Tr::read(csb::CSBLow::ADDR, vec![0x5C, 0x0A, 0x00]),
+    ]
+});
 
 #[test]
 fn create_new() {

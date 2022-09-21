@@ -352,7 +352,6 @@ where
         nb::block!(new.reset())?;
         new.osr_channel(osr, ch)?;
         new.set_interrupts_enabled(INT_EN::RDY_EN)?;
-        new.set_interrupts_pinout(INT_CFG::from_bits_truncate(0))?;
         #[cfg(feature = "defmt")]
         info!("HP203B altimeter object created and configured");
         Ok(new)
@@ -473,8 +472,8 @@ where
 
         if !self.waiting_baro {
             self.command(Command::READ_P)?;
+            self.waiting_baro = true;
         }
-        self.waiting_baro = true;
 
         let pres = self.read_one(INT_SRC::PA_RDY)?;
 
@@ -597,6 +596,7 @@ where
 
         if !self.waiting_baro {
             self.command(Command::READ_A)?;
+            self.waiting_baro = true;
         }
 
         self.read_one(INT_SRC::PA_RDY)
@@ -608,15 +608,14 @@ where
 fn raw_reading_to_float(reading: &[u8]) -> f32 {
     assert!(reading.len() == 3);
     let signed: i32 = {
-        let mut base = if reading[0] & (1 << 3) == (1 << 3) {
+        let base = if reading[2] & (1 << 3) == (1 << 3) {
             i32::MIN + 0x7FF8_0000
         } else {
             0
         };
-        base += i32::from(reading[0] & 0b0000_0111) << 16;
-        base += i32::from(reading[1]) << 8;
-        base += i32::from(reading[2]);
-        base
+        base + (i32::from(reading[2] & 0b0000_0111) << 16)
+            + (i32::from(reading[1]) << 8)
+            + i32::from(reading[0])
     };
     signed as f32 / 100.0
 }
@@ -627,9 +626,9 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(&[0x00, 0x0A, 0x5C], 26.52)]
-    #[test_case(&[0xFF, 0xFC, 0x02], -10.22)]
-    #[test_case(&[0x01, 0x8A, 0x9E], 1010.22)]
+    #[test_case(&[0x5C, 0x0A, 0x00], 26.52)]
+    #[test_case(&[0x02, 0xFC, 0xFF], -10.22)]
+    #[test_case(&[0x9E, 0x8A, 0x01], 1010.22)]
     fn reading_to_float(input: &[u8], expected: f32) {
         assert_eq!(raw_reading_to_float(input), expected);
     }
