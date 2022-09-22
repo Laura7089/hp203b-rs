@@ -312,6 +312,7 @@ dependencies = [
  "bytemuck",
  "defmt",
  "embedded-hal 1.0.0-alpha.8",
+ "fugit",
  "nb 1.0.0",
 ]
 

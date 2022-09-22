@@ -1,9 +1,12 @@
 use bitflags::bitflags;
+#[cfg(feature = "defmt")]
+use defmt::trace;
 use embedded_hal::i2c::blocking::I2c;
 
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FlagRegister {
     /// Enable or disable interrupts
     INT_EN = 0x0B,
@@ -116,16 +119,22 @@ bitflags! {
 }
 
 macro_rules! getter {
-    ($funcname:ident -> $reg:expr , $flags:ty) => {
-        fn $funcname(&mut self) -> Result<$flags, I::Error> {
-            Ok(<$flags>::from_bits_truncate(self.read_flags($reg)?))
+    ($funcname:ident -> $reg:ident) => {
+        fn $funcname(&mut self) -> Result<$reg, I::Error> {
+            #[cfg(feature = "defmt")]
+            trace!("Reading flags {}", FlagRegister::$reg);
+            Ok(<$reg>::from_bits_truncate(
+                self.read_flags(FlagRegister::$reg)?,
+            ))
         }
     };
 }
 macro_rules! setter {
-    ($funcname:ident -> $reg:expr , $flags:ty) => {
-        fn $funcname(&mut self, val: $flags) -> Result<(), I::Error> {
-            self.write_flags($reg, val.bits())
+    ($funcname:ident -> $reg:ident) => {
+        fn $funcname(&mut self, val: $reg) -> Result<(), I::Error> {
+            #[cfg(feature = "defmt")]
+            trace!("Writing flags {}", FlagRegister::$reg);
+            self.write_flags(FlagRegister::$reg, val.bits())
         }
     };
 }
@@ -135,15 +144,15 @@ pub trait Flags<I: I2c> {
     fn read_flags(&mut self, reg: FlagRegister) -> Result<u8, I::Error>;
     fn write_flags(&mut self, reg: FlagRegister, val: u8) -> Result<(), I::Error>;
 
-    getter! { get_interrupts -> FlagRegister::INT_SRC, INT_SRC }
-    getter! { get_interrupt_extras -> FlagRegister::INT_DIR, INT_DIR }
-    getter! { get_interrupts_enabled -> FlagRegister::INT_EN, INT_EN }
-    getter! { get_interrupts_pinout -> FlagRegister::INT_CFG, INT_CFG }
-    getter! { para -> FlagRegister::PARA, PARA }
+    getter! { get_interrupts -> INT_SRC }
+    getter! { get_interrupt_extras -> INT_DIR }
+    getter! { get_interrupts_enabled -> INT_EN }
+    getter! { get_interrupts_pinout -> INT_CFG }
+    getter! { para -> PARA }
 
-    setter! { set_interrupts_enabled -> FlagRegister::INT_EN, INT_EN }
-    setter! { set_interrupts_pinout -> FlagRegister::INT_CFG, INT_CFG }
-    setter! { set_para -> FlagRegister::PARA, PARA }
+    setter! { set_interrupts_enabled -> INT_EN }
+    setter! { set_interrupts_pinout -> INT_CFG }
+    setter! { set_para -> PARA }
 }
 
 impl<I: I2c, T> Flags<I> for T
