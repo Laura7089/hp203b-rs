@@ -1,6 +1,7 @@
 use hp203b::*;
 
 use csb::CSB;
+use embedded_hal_mock::delay::MockNoop;
 use embedded_hal_mock::i2c::{Mock, Transaction as Tr};
 use once_cell::sync::Lazy;
 use std::ops::Deref;
@@ -33,7 +34,7 @@ static READ_PRES: Lazy<[Tr; 3]> = Lazy::new(|| {
         Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
     ]
 });
-const PRES_VAL: f32 = 26.52;
+const PRES_VAL: Pressure = Pressure(26.52);
 
 static READ_ALTI: Lazy<[Tr; 3]> = Lazy::new(|| {
     [
@@ -48,20 +49,20 @@ static READ_ALTI: Lazy<[Tr; 3]> = Lazy::new(|| {
 
 #[test]
 fn create_new() {
-    let alti = HP203B::new(Mock::new(NEW.deref()), OSR, CHAN).unwrap();
+    let mut delay = MockNoop::default();
+    let alti = HP203B::new(Mock::new(NEW.deref()), OSR, CHAN, &mut delay).unwrap();
     alti.destroy().done();
 }
 
 #[test]
 fn read_pressure() {
-    let osr = OSR::OSR1024;
-    let chan = Channel::SensorPressureTemperature;
+    let mut delay = MockNoop::default();
 
     let mut mock_seq = NEW.to_vec();
     mock_seq.extend_from_slice(READ_PRES.deref());
     let mock = Mock::new(&mock_seq);
 
-    let mut alti = HP203B::new(mock, osr, chan).unwrap();
+    let mut alti = HP203B::new(mock, OSR, CHAN, &mut delay).unwrap();
     assert_eq!(nb::block!(alti.read_pres()).unwrap(), PRES_VAL);
 
     alti.destroy().done();

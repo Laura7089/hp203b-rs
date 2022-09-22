@@ -5,21 +5,23 @@
 //! ```no_run
 //! use hp203b::{HP203B, csb::CSBLow, OSR, Channel};
 //! # use embedded_hal::i2c::ErrorKind;
-//! # use embedded_hal_mock::i2c::Mock;
+//! # use embedded_hal_mock::{i2c::Mock, delay::MockNoop};
 //! # fn main() -> Result<(), ErrorKind> {
 //!
-//! // ... initialise i2c device
+//! // ... initialise i2c device and delay
 //! # let i2c = Mock::new(&[]);
+//! # let mut delay = MockNoop::default();
 //!
 //! let altimeter = HP203B::<_, _, CSBLow>::new(
 //!     i2c,
 //!     OSR::OSR1024,
 //!     Channel::SensorPressureTemperature,
+//!     &mut delay,
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
 //! let alti = nb::block!(altimeter.read_alti())?;
-//! println!("Altitude: {alti}m");
+//! println!("Altitude: {}m", alti.0);
 //! # Ok(())
 //! # }
 //! ```
@@ -51,6 +53,7 @@ use registers::{Register16, Register8, Registers};
 use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
 use defmt::{assert, debug, error, info, trace};
+use embedded_hal::delay::blocking::DelayUs;
 use embedded_hal::i2c::blocking::I2c;
 
 /// Mode-setting for the altimeter
@@ -118,9 +121,7 @@ pub enum OSR {
     OSR128 = 0b1_0100,
 }
 
-#[cfg(feature = "fugit")]
 use fugit::{ExtU32, MicrosDurationU32};
-#[cfg(feature = "fugit")]
 impl OSR {
     /// Time delay associated with OSR setting
     ///
@@ -194,13 +195,14 @@ where
     ///
     /// It is the caller's responsibility to ensure no other methods are called on the device until
     /// this method returns `Ok(())`.
-    pub fn reset(&mut self) -> nb::Result<(), E> {
+    pub fn reset(&mut self, delay: &mut impl DelayUs) -> nb::Result<(), E> {
         #[cfg(feature = "defmt")]
         debug!("Resetting device");
         self.waiting_temp = false;
         self.waiting_baro = false;
         if !self.waiting_reset {
             self.command(Command::SOFT_RST)?;
+            delay.delay_ms(100).unwrap(); // TODO: bad
             self.waiting_reset = true;
         }
 
@@ -219,6 +221,18 @@ where
         #[cfg(feature = "defmt")]
         debug!("Checking ready flag");
         Ok(self.get_interrupts()?.contains(flags::INT_SRC::DEV_RDY))
+    }
+
+    /// Returns `Err(WouldBlock)` until the `DEV_RDY` flag is set on the device
+    pub fn wait_ready(&mut self) -> nb::Result<(), E> {
+        if !self.is_ready()? {
+            #[cfg(feature = "defmt")]
+            trace!("Device hasn't set ready flag, sending WouldBlock");
+            return Err(nb::Error::WouldBlock);
+        }
+
+        self.waiting_reset = false;
+        Ok(())
     }
 
     /// Set the window bounds for the temperature measurement
@@ -281,17 +295,17 @@ where
     /// Get temperature in celsius
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` flag.
-    pub fn read_temp(&mut self) -> nb::Result<f32, E> {
+    pub fn read_temp(&mut self) -> nb::Result<Temperature, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
         if !self.waiting_temp {
             self.command(Command::READ_T)?;
             self.waiting_temp = true;
         }
-        self.read_one(INT_SRC::T_RDY)
+        Ok(self.read_one(INT_SRC::T_RDY)?.into())
     }
 
-    fn read_one(&mut self, ready: INT_SRC) -> nb::Result<f32, E> {
+    fn read_one(&mut self, ready: INT_SRC) -> nb::Result<[u8; 3], E> {
         #[cfg(feature = "defmt")]
         trace!("Reading value {}", ready);
 
@@ -308,10 +322,10 @@ where
             INT_SRC::T_RDY => self.waiting_temp = false,
             _ => unreachable!(),
         }
-        Ok(raw_reading_to_float(&raw))
+        Ok(raw)
     }
 
-    fn read_two(&mut self) -> nb::Result<(f32, f32), E> {
+    fn read_two(&mut self) -> nb::Result<[u8; 6], E> {
         #[cfg(feature = "defmt")]
         trace!("Reading both values from device");
 
@@ -328,10 +342,7 @@ where
         self.i2c.read(Self::ADDR, &mut raw)?;
         self.waiting_temp = false;
         self.waiting_baro = false;
-        Ok((
-            raw_reading_to_float(&raw[0..3]),
-            raw_reading_to_float(&raw[3..6]),
-        ))
+        Ok(raw)
     }
 
     fn command(&mut self, cmd: Command) -> Result<(), E> {
@@ -367,7 +378,7 @@ where
     /// 1. Blocks on resetting the device with [`Self::reset`].
     /// 1. Sets settings for the onboard ADC (see [`Self::osr_channel`]).
     /// 1. Resets the configuration registers.
-    pub fn new(i2c: I, osr: OSR, ch: Channel) -> Result<Self, E> {
+    pub fn new(i2c: I, osr: OSR, ch: Channel, delay: &mut impl DelayUs) -> Result<Self, E> {
         #[cfg(feature = "defmt")]
         debug!("Creating new HP203B altimeter");
         let mut new = Self {
@@ -377,7 +388,7 @@ where
             waiting_temp: false,
             waiting_reset: false,
         };
-        nb::block!(new.reset())?;
+        nb::block!(new.reset(delay))?;
         new.osr_channel(osr, ch)?;
         new.set_interrupts_enabled(INT_EN::RDY_EN)?;
         #[cfg(feature = "defmt")]
@@ -469,7 +480,7 @@ where
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
     /// and `PA_RDY` flags.
-    pub fn read_pres_temp(&mut self) -> nb::Result<(f32, f32), E> {
+    pub fn read_pres_temp(&mut self) -> nb::Result<(Pressure, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
 
@@ -482,19 +493,20 @@ where
         self.waiting_temp = true;
         self.waiting_baro = true;
 
-        let (pres, temp) = self.read_two()?;
+        let raw = self.read_two()?;
+        let vals = ((&raw[0..3]).into(), (&raw[3..6]).into());
 
         #[cfg(feature = "defmt")]
-        if pres < 0.0 {
-            error!("Pressure reading below zero: {}Pa", pres);
+        if vals.0 < 0.0 {
+            error!("Pressure reading below zero: {}Pa", vals.0);
         }
-        Ok((pres, temp))
+        Ok(vals)
     }
 
     /// Read a pressure measurement
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the devices sets the `PA_RDY` flag.
-    pub fn read_pres(&mut self) -> nb::Result<f32, E> {
+    pub fn read_pres(&mut self) -> nb::Result<Pressure, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
 
@@ -503,7 +515,7 @@ where
             self.waiting_baro = true;
         }
 
-        let pres = self.read_one(INT_SRC::PA_RDY)?;
+        let pres = self.read_one(INT_SRC::PA_RDY)?.into();
 
         #[cfg(feature = "defmt")]
         if pres < 0.0 {
@@ -599,7 +611,7 @@ where
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
     /// and `PA_RDY` flags.
-    pub fn read_alti_temp(&mut self) -> nb::Result<(f32, f32), E> {
+    pub fn read_alti_temp(&mut self) -> nb::Result<(Altitude, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
 
@@ -612,13 +624,14 @@ where
         self.waiting_temp = true;
         self.waiting_baro = true;
 
-        self.read_two()
+        let raw = self.read_two()?;
+        Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
     }
 
     /// Read an altitude measurement
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `PA_RDY` flag.
-    pub fn read_alti(&mut self) -> nb::Result<f32, E> {
+    pub fn read_alti(&mut self) -> nb::Result<Altitude, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
 
@@ -627,13 +640,11 @@ where
             self.waiting_baro = true;
         }
 
-        self.read_one(INT_SRC::PA_RDY)
+        Ok(self.read_one(INT_SRC::PA_RDY)?.into())
     }
 }
 
-/// Takes a 24-bit 2's complement number and converts it to a float/100
-#[allow(clippy::cast_precision_loss)]
-fn raw_reading_to_float(reading: &[u8]) -> f32 {
+fn read_signed(reading: &[u8]) -> f32 {
     assert!(reading.len() == 3);
     let signed: i32 = {
         let base = if reading[0] & 0b1000 == 0b1000 {
@@ -645,10 +656,69 @@ fn raw_reading_to_float(reading: &[u8]) -> f32 {
             + (i32::from(reading[1]) << 8)
             + i32::from(reading[2])
     };
-    let res = signed as f32 / 100.0;
-    #[cfg(feature = "defmt")]
-    trace!("Converted raw output {} to float {}", reading, res);
-    res
+    signed as f32
+}
+
+fn read_unsigned(reading: &[u8]) -> f32 {
+    assert!(reading.len() == 3);
+    let signed: u32 = {
+        (u32::from(reading[0] & 0b0000_1111) << 16)
+            + (u32::from(reading[1]) << 8)
+            + u32::from(reading[2])
+    };
+    signed as f32
+}
+
+/// A pressure reading, in mBar
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Pressure(pub f32);
+impl From<&[u8]> for Pressure {
+    fn from(reading: &[u8]) -> Self {
+        let res = read_unsigned(reading) / 100.0;
+        #[cfg(feature = "defmt")]
+        trace!("Converted raw output {} to pressure {}mBar", reading, res);
+        Self(res)
+    }
+}
+impl From<[u8; 3]> for Pressure {
+    fn from(reading: [u8; 3]) -> Self {
+        <Self as From<&[u8]>>::from(&reading)
+    }
+}
+/// An altitude reading, in metres
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Altitude(pub f32);
+impl From<&[u8]> for Altitude {
+    fn from(reading: &[u8]) -> Self {
+        let res = read_signed(reading) / 100.0;
+        #[cfg(feature = "defmt")]
+        trace!("Converted raw output {} to altitude {}m", reading, res);
+        Self(res)
+    }
+}
+impl From<[u8; 3]> for Altitude {
+    fn from(reading: [u8; 3]) -> Self {
+        <Self as From<&[u8]>>::from(&reading)
+    }
+}
+/// A temperature reading, in degrees celsius
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Temperature(pub f32);
+impl From<&[u8]> for Temperature {
+    fn from(reading: &[u8]) -> Self {
+        let res = read_signed(reading) / 100.0;
+        #[cfg(feature = "defmt")]
+        trace!("Converted raw output {} to temp {}°C", reading, res);
+        Self(res)
+    }
+}
+impl From<[u8; 3]> for Temperature {
+    fn from(reading: [u8; 3]) -> Self {
+        <Self as From<&[u8]>>::from(&reading)
+    }
 }
 
 // TODO: more tests
@@ -657,12 +727,17 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(&[0x00, 0x0A, 0x5C], 26.52)]
-    #[test_case(&[0xFF, 0xFC, 0x02], -10.22)]
-    #[test_case(&[0x01, 0x8A, 0x9E], 1010.22)]
-    #[test_case(&[0x00, 0x13, 0x88], 50.0)]
-    #[test_case(&[0xFF, 0xEC, 0x78], -50.0)]
-    fn reading_to_float(input: &[u8], expected: f32) {
-        assert_eq!(raw_reading_to_float(input), expected);
+    // #[test_case(&[0x00, 0x0A, 0x5C], 26.52)]
+    // #[test_case(&[0xFF, 0xFC, 0x02], -10.22)]
+    // #[test_case(&[0x01, 0x8A, 0x9E], 1010.22)]
+    // #[test_case(&[0x00, 0x13, 0x88], 50.0)]
+    // #[test_case(&[0xFF, 0xEC, 0x78], -50.0)]
+    // fn reading_to_float(input: &[u8], expected: f32) {
+    //     assert_eq!(raw_reading_to_float(input), expected);
+    // }
+
+    #[test_case(&[0x01, 0x8a, 0x9e], Pressure(1010.22))]
+    fn raw_to_pressure(input: &[u8], expected: Pressure) {
+        assert_eq!(<&[u8] as Into<Pressure>>::into(input), expected);
     }
 }
