@@ -22,6 +22,9 @@ rp2040-boot2 = "0.2"
 cortex-m-rt = "0.7.1"
 shared-bus = { version = "0.2.4", default-features = false, features = ["cortex-m", "eh-alpha"] }
 nb = "1.0.0"
+cortex-m = "0.7.6"
+embedded-hal-compat = { version = "0.7.0", features = ["defmt"] }
+embedded-hal = "1.0.0-alpha.8"
 
 [features]
 # set logging levels here
