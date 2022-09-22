@@ -494,13 +494,7 @@ where
         self.waiting_baro = true;
 
         let raw = self.read_two()?;
-        let vals = ((&raw[0..3]).into(), (&raw[3..6]).into());
-
-        #[cfg(feature = "defmt")]
-        if vals.0 < 0.0 {
-            error!("Pressure reading below zero: {}Pa", vals.0);
-        }
-        Ok(vals)
+        Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
     }
 
     /// Read a pressure measurement
@@ -515,14 +509,7 @@ where
             self.waiting_baro = true;
         }
 
-        let pres = self.read_one(INT_SRC::PA_RDY)?.into();
-
-        #[cfg(feature = "defmt")]
-        if pres < 0.0 {
-            error!("Pressure reading below zero: {}Pa", pres);
-        }
-
-        Ok(pres)
+        Ok(self.read_one(INT_SRC::PA_RDY)?.into())
     }
 }
 
