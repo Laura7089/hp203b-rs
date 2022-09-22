@@ -22,12 +22,14 @@ mod tests {
     use shared_bus::BusManagerSimple;
 
     type I2CPin<P> = gpio::Pin<P, gpio::Function<gpio::I2C>>;
-    type I2C = i2c::I2C<pac::I2C0, (I2CPin<gpio::bank0::Gpio16>, I2CPin<gpio::bank0::Gpio17>)>;
+    type I2C = BusManagerSimple<
+        i2c::I2C<pac::I2C0, (I2CPin<gpio::bank0::Gpio16>, I2CPin<gpio::bank0::Gpio17>)>,
+    >;
 
     type HP203B<I, M> = hp203b::HP203B<I, M, hp203b::csb::CSBHigh>;
 
     #[init]
-    fn get_i2c() -> BusManagerSimple<I2C> {
+    fn get_i2c() -> I2C {
         let mut perips = pac::Peripherals::take().unwrap();
         let sio = hal::Sio::new(perips.SIO);
         let pins = hal::gpio::Pins::new(
@@ -48,7 +50,7 @@ mod tests {
     }
 
     #[test]
-    fn make_new(i2c: &mut BusManagerSimple<I2C>) {
+    fn make_new(i2c: &mut I2C) {
         HP203B::new(
             i2c.acquire_i2c(),
             OSR::OSR1024,
@@ -58,7 +60,7 @@ mod tests {
     }
 
     #[test]
-    fn is_ready(i2c: &mut BusManagerSimple<I2C>) {
+    fn is_ready(i2c: &mut I2C) {
         let mut alti = HP203B::new(
             i2c.acquire_i2c(),
             OSR::OSR1024,
@@ -69,7 +71,7 @@ mod tests {
     }
 
     #[test]
-    fn read_pressure(i2c: &mut BusManagerSimple<I2C>) {
+    fn read_pressure(i2c: &mut I2C) {
         let mut alti = HP203B::new(
             i2c.acquire_i2c(),
             OSR::OSR1024,
@@ -83,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    fn read_alti(i2c: &mut BusManagerSimple<I2C>) {
+    fn read_alti(i2c: &mut I2C) {
         let mut alti = HP203B::new(
             i2c.acquire_i2c(),
             OSR::OSR1024,

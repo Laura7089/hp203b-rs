@@ -1,9 +1,10 @@
+#![allow(non_camel_case_types)]
+
 use bitflags::bitflags;
 #[cfg(feature = "defmt")]
 use defmt::trace;
 use embedded_hal::i2c::blocking::I2c;
 
-#[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -38,7 +39,6 @@ pub(crate) const INT_SRC_VARIANTS: [INT_SRC; 6] = [
 
 bitflags! {
     /// Flags in [`Register8::INT_SRC`]
-    #[allow(non_camel_case_types)]
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct INT_SRC: u8 {
         const TH_ERR = 0b1000_0000;
@@ -61,7 +61,6 @@ bitflags! {
     /// Flags in [`Register8::INT_EN`]
     ///
     /// Enable or disable individual interrupts.
-    #[allow(non_camel_case_types)]
     pub struct INT_EN: u8 {
         const PA_RDY_EN = 0b0010_0000;
         const T_RDY_EN = 0b0001_0000;
@@ -75,7 +74,6 @@ bitflags! {
     /// Flags in [`Register8::INT_CFG`]
     ///
     /// `*_CFG` values denote whether that interrupt will set the `INT1` pin.
-    #[allow(non_camel_case_types)]
     pub struct INT_CFG: u8 {
         /// Pressure/Altitude selection
         ///
@@ -102,7 +100,6 @@ bitflags! {
     ///
     /// When traversal interrupts happen, `TRAV` flags indicate that the value is rising from
     /// low to high, otherwise it is falling from high to low.
-    #[allow(non_camel_case_types)]
     pub struct INT_DIR: u8 {
         const CMPS_EN = 0b1000_0000;
         const P_TRAV_DIR = 0b0000_1000;
@@ -111,7 +108,6 @@ bitflags! {
         const T_WIN_DIR = 0b0000_0001;
     }
 
-    #[allow(non_camel_case_types)]
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct PARA: u8 {
         const CMPS_EN = 0b1000_0000;
@@ -122,7 +118,7 @@ macro_rules! getter {
     ($funcname:ident -> $reg:ident) => {
         fn $funcname(&mut self) -> Result<$reg, I::Error> {
             #[cfg(feature = "defmt")]
-            trace!("Reading flags {}", FlagRegister::$reg);
+            trace!("Reading flags from {}", FlagRegister::$reg);
             Ok(<$reg>::from_bits_truncate(
                 self.read_flags(FlagRegister::$reg)?,
             ))
@@ -133,7 +129,7 @@ macro_rules! setter {
     ($funcname:ident -> $reg:ident) => {
         fn $funcname(&mut self, val: $reg) -> Result<(), I::Error> {
             #[cfg(feature = "defmt")]
-            trace!("Writing flags {}", FlagRegister::$reg);
+            trace!("Writing flags to {}", FlagRegister::$reg);
             self.write_flags(FlagRegister::$reg, val.bits())
         }
     };

@@ -18,7 +18,7 @@ fugit = { version = "0.3.6", features = ["defmt"] }
 hp203b = { path = "..", features = ["defmt"] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 rp2040-hal = { version = "0.6.0", features = ["defmt", "eh1_0_alpha"] }
-rp2040-boot2 = { version = "0.2" }
+rp2040-boot2 = "0.2"
 cortex-m-rt = "0.7.1"
 shared-bus = { version = "0.2.4", default-features = false, features = ["cortex-m", "eh-alpha"] }
 nb = "1.0.0"
