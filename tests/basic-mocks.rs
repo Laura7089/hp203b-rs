@@ -30,7 +30,7 @@ static READ_PRES: Lazy<[Tr; 3]> = Lazy::new(|| {
         // Check pressure is ready
         Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
         // Read pressure
-        Tr::read(csb::CSBLow::ADDR, vec![0x5C, 0x0A, 0x00]),
+        Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
     ]
 });
 const PRES_VAL: f32 = 26.52;
@@ -42,7 +42,7 @@ static READ_ALTI: Lazy<[Tr; 3]> = Lazy::new(|| {
         // Check pressure is ready
         Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
         // Read pressure
-        Tr::read(csb::CSBLow::ADDR, vec![0x5C, 0x0A, 0x00]),
+        Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
     ]
 });
 
