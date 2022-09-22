@@ -52,7 +52,7 @@ use registers::{Register16, Register8, Registers};
 
 use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
-use defmt::{assert, debug, error, info, trace};
+use defmt::{assert, debug, info, trace};
 use embedded_hal::delay::blocking::DelayUs;
 use embedded_hal::i2c::blocking::I2c;
 
@@ -674,7 +674,7 @@ impl From<[u8; 3]> for Pressure {
     }
 }
 /// An altitude reading, in metres
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Altitude(pub f32);
 impl From<&[u8]> for Altitude {
@@ -691,7 +691,7 @@ impl From<[u8; 3]> for Altitude {
     }
 }
 /// A temperature reading, in degrees celsius
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Temperature(pub f32);
 impl From<&[u8]> for Temperature {
@@ -714,17 +714,23 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    // #[test_case(&[0x00, 0x0A, 0x5C], 26.52)]
-    // #[test_case(&[0xFF, 0xFC, 0x02], -10.22)]
-    // #[test_case(&[0x01, 0x8A, 0x9E], 1010.22)]
-    // #[test_case(&[0x00, 0x13, 0x88], 50.0)]
-    // #[test_case(&[0xFF, 0xEC, 0x78], -50.0)]
-    // fn reading_to_float(input: &[u8], expected: f32) {
-    //     assert_eq!(raw_reading_to_float(input), expected);
-    // }
+    #[test_case(&[0x00, 0x0A, 0x5C], 26.52)]
+    #[test_case(&[0xFF, 0xFC, 0x02], -10.22)]
+    fn raw_to_temp(input: &[u8], expected: f32) {
+        assert_eq!(
+            <&[u8] as Into<Temperature>>::into(input),
+            Temperature(expected)
+        );
+    }
 
-    #[test_case(&[0x01, 0x8a, 0x9e], Pressure(1010.22))]
-    fn raw_to_pressure(input: &[u8], expected: Pressure) {
-        assert_eq!(<&[u8] as Into<Pressure>>::into(input), expected);
+    #[test_case(&[0x00, 0x13, 0x88], 50.0)]
+    #[test_case(&[0xFF, 0xEC, 0x78], -50.0)]
+    fn raw_to_alti(input: &[u8], expected: f32) {
+        assert_eq!(<&[u8] as Into<Altitude>>::into(input), Altitude(expected));
+    }
+
+    #[test_case(&[0x01, 0x8a, 0x9e], 1010.22)]
+    fn raw_to_pres(input: &[u8], expected: f32) {
+        assert_eq!(<&[u8] as Into<Pressure>>::into(input), Pressure(expected));
     }
 }
