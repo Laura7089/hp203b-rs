@@ -89,32 +89,55 @@ where
 }
 
 /// Decimation rate of internal digital filter
-///
-/// From the datasheet:
-///
-/// OSR | Temp Conversion Time (ms) | Temp + Pressure/Alt Conv. Time (ms)
-/// ---|---|---
-/// 128 | 2.1 | 4.1
-/// 256 | 4.1 | 8.2
-/// 512 | 8.2 | 16.4
-/// 1024 | 16.4 | 32.8
-/// 2048 | 32.8 | 65.6
-/// 4096 | 65.6 | 131.1
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum OSR {
-    /// Decimeation rate = 4096
+    /// Decimation rate = 4096
+    ///
+    /// Time for measurement = 65.6ms
     OSR4096 = 0b0_0000,
-    /// Decimeation rate = 2048
+    /// Decimation rate = 2048
+    ///
+    /// Time for measurement = 32.8ms
     OSR2048 = 0b0_0100,
-    /// Decimeation rate = 1024
+    /// Decimation rate = 1024
+    ///
+    /// Time for measurement = 16.4ms
     OSR1024 = 0b0_1000,
-    /// Decimeation rate = 512
+    /// Decimation rate = 512
+    ///
+    /// Time for measurement = 8.2ms
     OSR512 = 0b0_1100,
-    /// Decimeation rate = 256
+    /// Decimation rate = 256
+    ///
+    /// Time for measurement = 4.1ms
     OSR256 = 0b1_0000,
-    /// Decimeation rate = 128
+    /// Decimation rate = 128
+    ///
+    /// Time for measurement = 2.1ms
     OSR128 = 0b1_0100,
+}
+
+#[cfg(feature = "fugit")]
+use fugit::{ExtU32, MicrosDurationU32};
+#[cfg(feature = "fugit")]
+impl OSR {
+    /// Time delay associated with OSR setting
+    ///
+    /// The amount of time, in microseconds, that a single measurement is expected to take on the
+    /// onboard ADC.
+    /// Double this for [`HP203B::read_alti_temp`] and [`HP203B::read_pres_temp`].
+    pub fn associated_delay(self) -> MicrosDurationU32 {
+        match self {
+            OSR::OSR128 => 2100,
+            OSR::OSR256 => 4100,
+            OSR::OSR512 => 8200,
+            OSR::OSR1024 => 16400,
+            OSR::OSR2048 => 32800,
+            OSR::OSR4096 => 65600,
+        }
+        .millis()
+    }
 }
 
 /// Which data to convert with internal ADC
