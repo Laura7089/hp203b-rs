@@ -41,6 +41,7 @@ bitflags! {
     /// Flags in [`Register8::INT_SRC`]
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct INT_SRC: u8 {
+        /// Threshold error - bounds are wrong
         const TH_ERR = 0b1000_0000;
         /// Device ready bit
         const DEV_RDY = 0b0100_0000;
@@ -161,5 +162,21 @@ where
 
     fn write_flags(&mut self, reg: FlagRegister, val: u8) -> Result<(), I::Error> {
         self.write_raw(reg as u8, val)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contains_sanity_check() {
+        assert!(INT_SRC::from_bits_truncate(0x50).contains(INT_SRC::DEV_RDY));
+    }
+
+    #[test]
+    #[should_panic]
+    fn no_contains_sanity_check() {
+        assert!(INT_SRC::from_bits_truncate(0x50).contains(INT_SRC::PA_RDY));
     }
 }

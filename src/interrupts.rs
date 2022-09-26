@@ -21,7 +21,7 @@
 //! alti.set_pres_mid(100.0)?;
 //! alti.setup_interrupts([(Event::PATraversed, InterruptSetting::Enabled)])?;
 //!
-//! let _ = nb::block!(alti.read_pres())?;
+//! let _ = alti.read_pres()?;
 //!
 //! // Let's check if it moved across our midpoint
 //! for int in alti.interrupts()? {

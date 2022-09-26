@@ -20,7 +20,7 @@
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
-//! let alti = nb::block!(altimeter.read_alti())?;
+//! let alti = altimeter.read_alti()?;
 //! println!("Altitude: {}m", alti.0);
 //! # Ok(())
 //! # }
@@ -40,13 +40,13 @@
 
 // TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
 // TODO: remove user access to the `*_RDY` interrupts?
-// TODO: allow `no_run` tests to be run, use `embedded-hal-mock`?
+// TODO: allow blocking on interrupts again
 
 mod flags;
 pub mod interrupts;
 mod registers;
 
-use flags::{Flags, INT_CFG, INT_EN, INT_SRC};
+use flags::{Flags, INT_CFG, INT_EN};
 pub use registers::csb;
 use registers::{Register16, Register8, Registers};
 
@@ -85,8 +85,6 @@ where
     C: csb::CSB,
 {
     i2c: I,
-    waiting_baro: bool,
-    waiting_temp: bool,
     waiting_reset: bool,
     _c: PhantomData<(C, M)>,
 }
@@ -198,8 +196,6 @@ where
     pub fn reset(&mut self, delay: &mut impl DelayUs) -> nb::Result<(), E> {
         #[cfg(feature = "defmt")]
         debug!("Resetting device");
-        self.waiting_temp = false;
-        self.waiting_baro = false;
         if !self.waiting_reset {
             self.command(Command::SOFT_RST)?;
             delay.delay_ms(100).unwrap(); // TODO: bad
@@ -295,53 +291,27 @@ where
     /// Get temperature in celsius
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` flag.
-    pub fn read_temp(&mut self) -> nb::Result<Temperature, E> {
+    pub fn read_temp(&mut self) -> Result<Temperature, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
-        if !self.waiting_temp {
-            self.command(Command::READ_T)?;
-            self.waiting_temp = true;
-        }
-        Ok(self.read_one(INT_SRC::T_RDY)?.into())
+        Ok(self.read_one(Command::READ_T)?.into())
     }
 
-    fn read_one(&mut self, ready: INT_SRC) -> nb::Result<[u8; 3], E> {
-        #[cfg(feature = "defmt")]
-        trace!("Reading value {}", ready);
-
-        if !self.get_interrupts()?.contains(ready) {
-            #[cfg(feature = "defmt")]
-            trace!("Device hasn't set {}, sending WouldBlock", ready);
-            return Err(nb::Error::WouldBlock);
-        }
-
+    fn read_one(&mut self, cmd: Command) -> Result<[u8; 3], E> {
         let mut raw = [0; 3];
-        self.i2c.read(Self::ADDR, &mut raw)?;
-        match ready {
-            INT_SRC::PA_RDY => self.waiting_baro = false,
-            INT_SRC::T_RDY => self.waiting_temp = false,
-            _ => unreachable!(),
-        }
+        #[cfg(feature = "defmt")]
+        trace!("Sending command {}", cmd);
+        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
         Ok(raw)
     }
 
-    fn read_two(&mut self) -> nb::Result<[u8; 6], E> {
+    fn read_two(&mut self, cmd: Command) -> Result<[u8; 6], E> {
         #[cfg(feature = "defmt")]
         trace!("Reading both values from device");
-
-        if !self
-            .get_interrupts()?
-            .contains(INT_SRC::PA_RDY & INT_SRC::T_RDY)
-        {
-            #[cfg(feature = "defmt")]
-            trace!("Device doesn't have both ready flags set, sending WouldBlock");
-            return Err(nb::Error::WouldBlock);
-        }
-
         let mut raw = [0; 6];
-        self.i2c.read(Self::ADDR, &mut raw)?;
-        self.waiting_temp = false;
-        self.waiting_baro = false;
+        #[cfg(feature = "defmt")]
+        trace!("Sending command {}", cmd);
+        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
         Ok(raw)
     }
 
@@ -384,8 +354,6 @@ where
         let mut new = Self {
             i2c,
             _c: PhantomData,
-            waiting_baro: false,
-            waiting_temp: false,
             waiting_reset: false,
         };
         nb::block!(new.reset(delay))?;
@@ -403,8 +371,6 @@ where
     pub fn to_altitude(self) -> Result<HP203B<I, mode::Altitude, C>, E> {
         let mut new = HP203B::<_, mode::Altitude, _> {
             _c: PhantomData,
-            waiting_baro: false,
-            waiting_temp: self.waiting_temp,
             waiting_reset: false,
             i2c: self.destroy(),
         };
@@ -480,36 +446,20 @@ where
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
     /// and `PA_RDY` flags.
-    pub fn read_pres_temp(&mut self) -> nb::Result<(Pressure, Temperature), E> {
+    pub fn read_pres_temp(&mut self) -> Result<(Pressure, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
-
-        match (self.waiting_temp, self.waiting_baro) {
-            (false, false) => self.command(Command::READ_PT)?,
-            (true, false) => self.command(Command::READ_P)?,
-            (false, true) => self.command(Command::READ_T)?,
-            (true, true) => (),
-        }
-        self.waiting_temp = true;
-        self.waiting_baro = true;
-
-        let raw = self.read_two()?;
+        let raw = self.read_two(Command::READ_PT)?;
         Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
     }
 
     /// Read a pressure measurement
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the devices sets the `PA_RDY` flag.
-    pub fn read_pres(&mut self) -> nb::Result<Pressure, E> {
+    pub fn read_pres(&mut self) -> Result<Pressure, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
-
-        if !self.waiting_baro {
-            self.command(Command::READ_P)?;
-            self.waiting_baro = true;
-        }
-
-        Ok(self.read_one(INT_SRC::PA_RDY)?.into())
+        Ok(self.read_one(Command::READ_P)?.into())
     }
 }
 
@@ -525,8 +475,6 @@ where
     pub fn to_pressure(self) -> Result<HP203B<I, mode::Pressure, C>, E> {
         let mut new = HP203B::<_, mode::Pressure, _> {
             _c: PhantomData,
-            waiting_temp: self.waiting_temp,
-            waiting_baro: false,
             waiting_reset: false,
             i2c: self.destroy(),
         };
@@ -598,36 +546,20 @@ where
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
     /// and `PA_RDY` flags.
-    pub fn read_alti_temp(&mut self) -> nb::Result<(Altitude, Temperature), E> {
+    pub fn read_alti_temp(&mut self) -> Result<(Altitude, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
-
-        match (self.waiting_temp, self.waiting_baro) {
-            (false, false) => self.command(Command::READ_AT)?,
-            (true, false) => self.command(Command::READ_A)?,
-            (false, true) => self.command(Command::READ_T)?,
-            (true, true) => (),
-        }
-        self.waiting_temp = true;
-        self.waiting_baro = true;
-
-        let raw = self.read_two()?;
+        let raw = self.read_two(Command::READ_AT)?;
         Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
     }
 
     /// Read an altitude measurement
     ///
     /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `PA_RDY` flag.
-    pub fn read_alti(&mut self) -> nb::Result<Altitude, E> {
+    pub fn read_alti(&mut self) -> Result<Altitude, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
-
-        if !self.waiting_baro {
-            self.command(Command::READ_A)?;
-            self.waiting_baro = true;
-        }
-
-        Ok(self.read_one(INT_SRC::PA_RDY)?.into())
+        Ok(self.read_one(Command::READ_A)?.into())
     }
 }
 

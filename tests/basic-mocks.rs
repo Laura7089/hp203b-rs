@@ -24,28 +24,27 @@ static NEW: Lazy<[Tr; 4]> = Lazy::new(|| {
     ]
 });
 
-static READ_PRES: Lazy<[Tr; 3]> = Lazy::new(|| {
+static READ_PRES: Lazy<[Tr; 2]> = Lazy::new(|| {
     [
         // READ_P
         Tr::write(csb::CSBLow::ADDR, vec![0x30]),
-        // Check pressure is ready
-        Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
         // Read pressure
         Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
     ]
 });
 const PRES_VAL: Pressure = Pressure(26.52);
 
-static READ_ALTI: Lazy<[Tr; 3]> = Lazy::new(|| {
-    [
-        // READ_A
-        Tr::write(csb::CSBLow::ADDR, vec![0x31]),
-        // Check pressure is ready
-        Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
-        // Read pressure
-        Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
-    ]
-});
+// static READ_ALTI: Lazy<[Tr; 3]> = Lazy::new(|| {
+//     [
+//         // READ_A
+//         Tr::write(csb::CSBLow::ADDR, vec![0x31]),
+//         // Check pressure is ready
+//         Tr::write_read(csb::CSBLow::ADDR, vec![0x80 + 0x0d], vec![0b0010_0000]),
+//         // Read pressure
+//         Tr::read(csb::CSBLow::ADDR, vec![0x00, 0x0A, 0x5C]),
+//     ]
+// });
+// const ALTI_VAL: Altitude = Altitude(26.52);
 
 #[test]
 fn create_new() {
@@ -63,7 +62,7 @@ fn read_pressure() {
     let mock = Mock::new(&mock_seq);
 
     let mut alti = HP203B::new(mock, OSR, CHAN, &mut delay).unwrap();
-    assert_eq!(nb::block!(alti.read_pres()).unwrap(), PRES_VAL);
+    assert_eq!(alti.read_pres().unwrap(), PRES_VAL);
 
     alti.destroy().done();
 }

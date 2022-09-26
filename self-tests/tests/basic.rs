@@ -71,18 +71,6 @@ mod tests {
     }
 
     #[test]
-    fn is_ready((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(
-            i2c.acquire_i2c(),
-            OSR::OSR1024,
-            Channel::SensorPressureTemperature,
-            delay,
-        )
-        .unwrap();
-        alti.is_ready().unwrap();
-    }
-
-    #[test]
     fn read_pressure((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = HP203B::new(
             i2c.acquire_i2c(),
@@ -91,10 +79,10 @@ mod tests {
             delay,
         )
         .unwrap();
-        let pres = nb::block!(alti.read_pres()).unwrap();
+        let pres = alti.read_pres().unwrap();
         info!("Pressure reading: {}Pa", pres);
 
-        assert!(pres.0 > 0.0);
+        assert!(pres.0 >= 0.0);
     }
 
     #[test]
@@ -108,9 +96,20 @@ mod tests {
         .unwrap()
         .to_altitude()
         .unwrap();
-        info!(
-            "Altitude reading: {}m",
-            nb::block!(alti.read_alti()).unwrap()
-        );
+        info!("Altitude reading: {}m", alti.read_alti().unwrap());
+    }
+
+    #[test]
+    fn read_temp((i2c, delay): &mut (I2C, Delay)) {
+        let mut alti = HP203B::new(
+            i2c.acquire_i2c(),
+            OSR::OSR1024,
+            Channel::SensorPressureTemperature,
+            delay,
+        )
+        .unwrap()
+        .to_altitude()
+        .unwrap();
+        info!("Temperature reading: {}C", alti.read_temp().unwrap());
     }
 }
