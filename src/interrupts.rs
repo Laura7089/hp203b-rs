@@ -91,6 +91,20 @@ impl Into<flags::INT_CFG> for Event {
     }
 }
 
+#[allow(clippy::from_over_into)]
+impl Into<flags::INT_SRC> for Event {
+    fn into(self) -> flags::INT_SRC {
+        use Event::*;
+
+        match self {
+            PATraversed => flags::INT_SRC::PA_TRAV,
+            TemperatureTraversed => flags::INT_SRC::T_TRAV,
+            PAOutsideWindow => flags::INT_SRC::PA_WIN,
+            TemperatureOutsideWindow => flags::INT_SRC::T_WIN,
+        }
+    }
+}
+
 /// Configuration state for a single interrupt
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InterruptSetting {
@@ -203,6 +217,9 @@ pub trait HasInterrupts<E> {
         settings: S,
     ) -> Result<(), E>;
 
+    /// Return `Err` with `WouldBlock` until the event is set
+    fn block_on(&mut self, event: Event) -> nb::Result<(), E>;
+
     /// Check the traversal direction of the pressure/altitude measurement
     ///
     /// Only relevant to [`Event::PATraversed`].
@@ -300,6 +317,10 @@ where
             (true, false) => InterruptSetting::Enabled,
             (false, _) => InterruptSetting::Disabled,
         })
+    }
+
+    fn block_on(&mut self, event: Event) -> nb::Result<(), E> {
+        self.inner_block(event.into())
     }
 
     fn pa_traverse_direction(&mut self) -> Result<Option<TraversalDirection>, E> {

@@ -49,6 +49,8 @@ bitflags! {
         const PA_RDY = 0b0010_0000;
         /// Temperature measurement ready to read
         const T_RDY = 0b0001_0000;
+        /// All ready
+        const READ_RDY = Self::PA_RDY.bits | Self::T_RDY.bits;
         /// Pressure or altitude traversed the middle threshold
         const PA_TRAV = 0b0000_1000;
         /// Temperature traversed the middle threshold

@@ -294,6 +294,7 @@ where
     pub fn read_temp(&mut self) -> Result<Temperature, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
+        nb::block!(self.inner_block(flags::INT_SRC::T_RDY))?;
         Ok(self.read_one(Command::READ_T)?.into())
     }
 
@@ -319,6 +320,14 @@ where
         #[cfg(feature = "defmt")]
         trace!("Sending command {}", cmd);
         self.i2c.write(Self::ADDR, &[cmd as u8])
+    }
+
+    fn inner_block(&mut self, event: flags::INT_SRC) -> nb::Result<(), E> {
+        if self.get_interrupts()?.contains(event) {
+            Ok(())
+        } else {
+            Err(nb::Error::WouldBlock)
+        }
     }
 }
 
@@ -449,6 +458,7 @@ where
     pub fn read_pres_temp(&mut self) -> Result<(Pressure, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
+        nb::block!(self.inner_block(flags::INT_SRC::READ_RDY))?;
         let raw = self.read_two(Command::READ_PT)?;
         Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
     }
@@ -459,6 +469,7 @@ where
     pub fn read_pres(&mut self) -> Result<Pressure, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
+        nb::block!(self.inner_block(flags::INT_SRC::PA_RDY))?;
         Ok(self.read_one(Command::READ_P)?.into())
     }
 }
@@ -549,6 +560,7 @@ where
     pub fn read_alti_temp(&mut self) -> Result<(Altitude, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
+        nb::block!(self.inner_block(flags::INT_SRC::READ_RDY))?;
         let raw = self.read_two(Command::READ_AT)?;
         Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
     }
@@ -559,6 +571,7 @@ where
     pub fn read_alti(&mut self) -> Result<Altitude, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
+        nb::block!(self.inner_block(flags::INT_SRC::PA_RDY))?;
         Ok(self.read_one(Command::READ_A)?.into())
     }
 }
