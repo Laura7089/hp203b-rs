@@ -317,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "hp203b"
-version = "0.3.0-pre.2"
+version = "0.3.0"
 dependencies = [
  "bitflags",
  "bytemuck",
