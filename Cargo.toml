@@ -20,6 +20,7 @@ nb = "1.0.0"
 test-case = "2.2.1"
 embedded-hal-mock = { git = "https://github.com/dbrgn/embedded-hal-mock", branch = "1-alpha" }
 once_cell = "1.14.0"
+rand = "0.8.5"
 
 [features]
 default = []

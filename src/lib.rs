@@ -60,10 +60,8 @@ use embedded_hal::i2c::blocking::I2c;
 #[allow(missing_docs)]
 pub mod mode {
     pub trait BarometricMeasurement {}
-    /// Altitude, in metres
     pub struct Altitude;
     impl BarometricMeasurement for Altitude {}
-    /// Pressure, in pascals
     pub struct Pressure;
     impl BarometricMeasurement for Pressure {}
 }
@@ -289,8 +287,6 @@ where
     }
 
     /// Get temperature in celsius
-    ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `T_RDY` flag.
     pub fn read_temp(&mut self) -> Result<Temperature, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
@@ -389,13 +385,12 @@ where
 
         new.set_alti_bounds(0, 0)?;
         new.set_alti_mid(0)?;
+        new.set_offset(0)?;
 
         let mut new_en_flags = new.get_interrupts_enabled()?;
         new_en_flags.remove(INT_EN::PA_TRAV_EN);
         new_en_flags.remove(INT_EN::PA_WIN_EN);
         new.set_interrupts_enabled(new_en_flags)?;
-
-        new.set_offset(0)?;
 
         let mut new_pinout_flags = new.get_interrupts_pinout()?;
         new_pinout_flags.insert(INT_CFG::PA_MODE);
@@ -452,9 +447,6 @@ where
     }
 
     /// Read both the temperature and pressure
-    ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
-    /// and `PA_RDY` flags.
     pub fn read_pres_temp(&mut self) -> Result<(Pressure, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
@@ -464,8 +456,6 @@ where
     }
 
     /// Read a pressure measurement
-    ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the devices sets the `PA_RDY` flag.
     pub fn read_pres(&mut self) -> Result<Pressure, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
@@ -554,9 +544,6 @@ where
     }
 
     /// Read both the temperature and altitude
-    ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets **both** the `T_RDY`
-    /// and `PA_RDY` flags.
     pub fn read_alti_temp(&mut self) -> Result<(Altitude, Temperature), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
@@ -566,8 +553,6 @@ where
     }
 
     /// Read an altitude measurement
-    ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `PA_RDY` flag.
     pub fn read_alti(&mut self) -> Result<Altitude, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
