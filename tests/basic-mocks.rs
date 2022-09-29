@@ -103,7 +103,7 @@ macro_rules! altimeter {
 }
 
 #[test]
-fn is_ready() {
+fn wait_ready() {
     let mut rng = thread_rng();
 
     for _ in 0..10 {

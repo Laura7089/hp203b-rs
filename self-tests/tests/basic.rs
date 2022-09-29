@@ -31,6 +31,9 @@ mod tests {
 
     type HP203B<I, M> = hp203b::HP203B<I, M, hp203b::csb::CSBHigh>;
 
+    const DEF_OSR: hp203b::OSR = hp203b::OSR::OSR1024;
+    const DEF_CHANNEL: hp203b::Channel = hp203b::Channel::SensorPressureTemperature;
+
     #[init]
     fn setup() -> (I2C, Delay) {
         let mut perips = pac::Peripherals::take().unwrap();
@@ -44,7 +47,7 @@ mod tests {
         );
 
         let mut delay = cortex_m::delay::Delay::new(core_perips.SYST, 100).forward();
-        delay.delay_ms(1000).unwrap();
+        delay.delay_ms(400).unwrap();
 
         (
             BusManagerSimple::new(hal::I2C::i2c0(
@@ -53,7 +56,7 @@ mod tests {
                 pins.gpio17.into_mode(),
                 400.kHz(),
                 &mut perips.RESETS,
-                125_000_000.Hz(),
+                125.MHz(),
             )),
             delay,
         )
@@ -72,26 +75,17 @@ mod tests {
 
     #[test]
     fn read_temp((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(
-            i2c.acquire_i2c(),
-            OSR::OSR1024,
-            Channel::SensorPressureTemperature,
-            delay,
-        )
-        .unwrap();
+        let mut alti = HP203B::new(i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, delay).unwrap();
+        delay.delay_ms(alti.read_delay().to_millis()).unwrap();
         let temp = alti.read_temp().unwrap();
         info!("Temperature reading: {}C", temp.0);
+        assert!(temp.0 != 655.35);
     }
 
     #[test]
     fn read_pressure((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(
-            i2c.acquire_i2c(),
-            OSR::OSR1024,
-            Channel::SensorPressureTemperature,
-            delay,
-        )
-        .unwrap();
+        let mut alti = HP203B::new(i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, delay).unwrap();
+        delay.delay_ms(alti.read_delay().to_millis()).unwrap();
         let pres = alti.read_pres().unwrap();
         info!("Pressure reading: {}mBar", pres.0);
         assert!(pres.0 >= 0.0);
@@ -99,15 +93,11 @@ mod tests {
 
     #[test]
     fn read_alti((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(
-            i2c.acquire_i2c(),
-            OSR::OSR1024,
-            Channel::SensorPressureTemperature,
-            delay,
-        )
-        .unwrap()
-        .to_altitude()
-        .unwrap();
+        let mut alti = HP203B::new(i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, delay)
+            .unwrap()
+            .to_altitude()
+            .unwrap();
+        delay.delay_ms(alti.read_delay().to_millis()).unwrap();
         let alti_measure = alti.read_alti().unwrap();
         info!("Altitude reading: {}m", alti_measure.0);
     }

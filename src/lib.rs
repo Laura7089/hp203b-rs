@@ -84,6 +84,7 @@ where
 {
     i2c: I,
     waiting_reset: bool,
+    osr: OSR,
     _c: PhantomData<(C, M)>,
 }
 
@@ -176,11 +177,19 @@ where
     }
 
     /// Set the decimation rate of the filter and the channel to perform ADC on
-    pub fn osr_channel(&mut self, osr: OSR, ch: Channel) -> Result<(), E> {
+    pub fn set_osr_channel(&mut self, osr: OSR, ch: Channel) -> Result<(), E> {
         #[cfg(feature = "defmt")]
         debug!("Setting {} and {}", osr, ch);
         let command = Command::ADC_CVT as u8 + osr as u8 + ch as u8;
         self.i2c.write(Self::ADDR, &[command])
+    }
+
+    /// Get the expected delay before another measurement will be ready
+    ///
+    /// Double this if you want to read two measurements.
+    /// Calls [`OSR::associated_delay`] under the hood.
+    pub fn read_delay(&self) -> MicrosDurationU32 {
+        self.osr.associated_delay()
     }
 
     /// Perform a software reset
@@ -360,9 +369,10 @@ where
             i2c,
             _c: PhantomData,
             waiting_reset: false,
+            osr,
         };
         nb::block!(new.reset(delay))?;
-        new.osr_channel(osr, ch)?;
+        new.set_osr_channel(osr, ch)?;
         new.set_interrupts_enabled(INT_EN::RDY_EN)?;
         #[cfg(feature = "defmt")]
         info!("HP203B altimeter object created and configured");
@@ -377,6 +387,7 @@ where
         let mut new = HP203B::<_, mode::Altitude, _> {
             _c: PhantomData,
             waiting_reset: false,
+            osr: self.osr,
             i2c: self.destroy(),
         };
 
@@ -477,6 +488,7 @@ where
         let mut new = HP203B::<_, mode::Pressure, _> {
             _c: PhantomData,
             waiting_reset: false,
+            osr: self.osr,
             i2c: self.destroy(),
         };
 
