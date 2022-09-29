@@ -38,9 +38,8 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::enum_glob_use)]
 
-// TODO: choose between `Barometric` and `Pressure/Altitude` to refer to the PA readings
 // TODO: remove user access to the `*_RDY` interrupts?
-// TODO: allow blocking on interrupts again
+// TODO: add implicit delays to the `read_*` methods?
 
 mod flags;
 pub mod interrupts;
@@ -458,7 +457,7 @@ where
     }
 
     /// Read both the temperature and pressure
-    pub fn read_pres_temp(&mut self) -> Result<(Pressure, Temperature), E> {
+    pub fn read_pres_temp(&mut self) -> Result<(Temperature, Pressure), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
         nb::block!(self.inner_block(flags::INT_SRC::READ_RDY))?;
@@ -556,7 +555,7 @@ where
     }
 
     /// Read both the temperature and altitude
-    pub fn read_alti_temp(&mut self) -> Result<(Altitude, Temperature), E> {
+    pub fn read_alti_temp(&mut self) -> Result<(Temperature, Altitude), E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
         nb::block!(self.inner_block(flags::INT_SRC::READ_RDY))?;
@@ -600,7 +599,6 @@ fn read_unsigned(reading: &[u8]) -> f32 {
 
 /// A pressure reading, in mBar
 #[derive(Copy, Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Pressure(pub f32);
 impl From<&[u8]> for Pressure {
     fn from(reading: &[u8]) -> Self {
@@ -615,9 +613,15 @@ impl From<[u8; 3]> for Pressure {
         <Self as From<&[u8]>>::from(&reading)
     }
 }
+#[cfg(feature = "defmt")]
+impl defmt::Format for Pressure {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}mBar", self.0);
+    }
+}
+
 /// An altitude reading, in metres
 #[derive(Copy, Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Altitude(pub f32);
 impl From<&[u8]> for Altitude {
     fn from(reading: &[u8]) -> Self {
@@ -632,9 +636,15 @@ impl From<[u8; 3]> for Altitude {
         <Self as From<&[u8]>>::from(&reading)
     }
 }
+#[cfg(feature = "defmt")]
+impl defmt::Format for Altitude {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}m", self.0);
+    }
+}
+
 /// A temperature reading, in degrees celsius
 #[derive(Copy, Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Temperature(pub f32);
 impl From<&[u8]> for Temperature {
     fn from(reading: &[u8]) -> Self {
@@ -647,6 +657,12 @@ impl From<&[u8]> for Temperature {
 impl From<[u8; 3]> for Temperature {
     fn from(reading: [u8; 3]) -> Self {
         <Self as From<&[u8]>>::from(&reading)
+    }
+}
+#[cfg(feature = "defmt")]
+impl defmt::Format for Temperature {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}°C", self.0);
     }
 }
 

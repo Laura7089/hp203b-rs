@@ -11,11 +11,26 @@ use panic_probe as _;
 #[used]
 pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
+macro_rules! test_alti {
+    ($i2c:expr, $delay:expr) => {{
+        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, $delay).unwrap();
+        let d = a.read_delay().to_millis();
+        debug!("Read delay: {}ms", d);
+        $delay.delay_ms(d).unwrap();
+        a
+    }};
+    ($i2c:expr, $mult:expr => $delay:expr) => {{
+        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, $delay).unwrap();
+        let d = a.read_delay().to_millis() * $mult;
+        debug!("Read delay: {}ms", d);
+        $delay.delay_ms(d).unwrap();
+        a
+    }};
+}
+
 #[defmt_test::tests]
 mod tests {
-    use hp203b::{Channel, OSR};
-
-    use defmt::info;
+    use defmt::{debug, info};
     use embedded_hal::delay::blocking::DelayUs;
     use embedded_hal_compat::ForwardCompat;
     use fugit::RateExtU32;
@@ -47,6 +62,7 @@ mod tests {
         );
 
         let mut delay = cortex_m::delay::Delay::new(core_perips.SYST, 100).forward();
+        debug!("Waiting for 400ms");
         delay.delay_ms(400).unwrap();
 
         (
@@ -62,43 +78,44 @@ mod tests {
         )
     }
 
-    // #[test]
-    // fn make_new((i2c, delay): &mut (I2C, Delay)) {
-    //     HP203B::new(
-    //         i2c.acquire_i2c(),
-    //         OSR::OSR1024,
-    //         Channel::SensorPressureTemperature,
-    //         delay,
-    //     )
-    //     .unwrap();
-    // }
+    #[test]
+    fn make_new((i2c, delay): &mut (I2C, Delay)) {
+        test_alti!(i2c, delay);
+    }
 
     #[test]
     fn read_temp((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, delay).unwrap();
-        delay.delay_ms(alti.read_delay().to_millis()).unwrap();
-        let temp = alti.read_temp().unwrap();
-        info!("Temperature reading: {}C", temp.0);
-        assert!(temp.0 != 655.35);
+        let mut alti = test_alti!(i2c, delay);
+        let t = alti.read_temp().unwrap();
+        info!("Temperature reading: {}", t);
+        assert!(t.0 != 655.35); // From an issue we previously had
     }
 
     #[test]
     fn read_pressure((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, delay).unwrap();
-        delay.delay_ms(alti.read_delay().to_millis()).unwrap();
-        let pres = alti.read_pres().unwrap();
-        info!("Pressure reading: {}mBar", pres.0);
-        assert!(pres.0 >= 0.0);
+        let mut alti = test_alti!(i2c, delay);
+        let p = alti.read_pres().unwrap();
+        info!("Pressure reading: {}", p);
+        assert!(p.0 >= 0.0);
+    }
+
+    #[test]
+    fn read_both_pres((i2c, delay): &mut (I2C, Delay)) {
+        let mut alti = test_alti!(i2c, 2 => delay);
+        let (t, p) = alti.read_pres_temp().unwrap();
+        info!("Pressure: {}, temp: {}", p, t);
     }
 
     #[test]
     fn read_alti((i2c, delay): &mut (I2C, Delay)) {
-        let mut alti = HP203B::new(i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, delay)
-            .unwrap()
-            .to_altitude()
-            .unwrap();
-        delay.delay_ms(alti.read_delay().to_millis()).unwrap();
-        let alti_measure = alti.read_alti().unwrap();
-        info!("Altitude reading: {}m", alti_measure.0);
+        let mut alti = test_alti!(i2c, delay).to_altitude().unwrap();
+        info!("Altitude reading: {}", alti.read_alti().unwrap());
+    }
+
+    #[test]
+    fn read_both_alti((i2c, delay): &mut (I2C, Delay)) {
+        let mut alti = test_alti!(i2c, delay).to_altitude().unwrap();
+        let (t, a) = alti.read_alti_temp().unwrap();
+        info!("Altitude: {}, temp: {}", a, t);
     }
 }
