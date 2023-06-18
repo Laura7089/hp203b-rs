@@ -87,6 +87,8 @@ where
     _c: PhantomData<(C, M)>,
 }
 
+// TODO: derive `Default` on settings-related enums
+
 /// Decimation rate of internal digital filter
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -359,7 +361,7 @@ where
     ///
     /// 1. Takes ownership of an I2C bus/device.
     /// 1. Blocks on resetting the device with [`Self::reset`].
-    /// 1. Sets settings for the onboard ADC (see [`Self::osr_channel`]).
+    /// 1. Sets settings for the onboard ADC (see [`Self::set_osr_channel`]).
     /// 1. Resets the configuration registers.
     pub fn new(i2c: I, osr: OSR, ch: Channel, delay: &mut impl DelayUs) -> Result<Self, E> {
         #[cfg(feature = "defmt")]
