@@ -13,14 +13,14 @@ pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
 macro_rules! test_alti {
     ($i2c:expr, $delay:expr) => {{
-        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, $delay).unwrap();
+        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL).unwrap();
         let d = a.read_delay().to_millis();
         debug!("Read delay: {}ms", d);
         $delay.delay_ms(d).unwrap();
         a
     }};
     ($i2c:expr, $mult:expr => $delay:expr) => {{
-        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL, $delay).unwrap();
+        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL).unwrap();
         let d = a.read_delay().to_millis() * $mult;
         debug!("Read delay: {}ms", d);
         $delay.delay_ms(d).unwrap();

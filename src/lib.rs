@@ -5,18 +5,16 @@
 //! ```no_run
 //! use hp203b::{HP203B, csb::CSBLow, OSR, Channel};
 //! # use embedded_hal::i2c::ErrorKind;
-//! # use embedded_hal_mock::{i2c::Mock, delay::MockNoop};
+//! # use embedded_hal_mock::i2c::Mock;
 //! # fn main() -> Result<(), ErrorKind> {
 //!
-//! // ... initialise i2c device and delay
+//! // ... initialise i2c device
 //! # let i2c = Mock::new(&[]);
-//! # let mut delay = MockNoop::default();
 //!
 //! let altimeter = HP203B::<_, _, CSBLow>::new(
 //!     i2c,
 //!     OSR::OSR1024,
 //!     Channel::SensorPressureTemperature,
-//!     &mut delay,
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
@@ -39,7 +37,6 @@
 #![allow(clippy::enum_glob_use)]
 
 // TODO: remove user access to the `*_RDY` interrupts?
-// TODO: add implicit delays to the `read_*` methods?
 
 mod flags;
 pub mod interrupts;
@@ -52,7 +49,6 @@ use registers::{Register16, Register8, Registers};
 use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
 use defmt::{assert, debug, info, trace};
-use embedded_hal::delay::blocking::DelayUs;
 use embedded_hal::i2c::blocking::I2c;
 
 /// Mode-setting for the altimeter
@@ -82,7 +78,6 @@ where
     C: csb::CSB,
 {
     i2c: I,
-    waiting_reset: bool,
     osr: OSR,
     _c: PhantomData<(C, M)>,
 }
@@ -195,28 +190,16 @@ where
 
     /// Perform a software reset
     ///
-    /// Returns [`nb::Result`] with `WouldBlock` until the device sets the `DEV_RDY` flag.
+    /// Doesn't wait for the ready state - use [`Self::is_ready`] for this.
     ///
     /// # Note
     ///
     /// It is the caller's responsibility to ensure no other methods are called on the device until
     /// this method returns `Ok(())`.
-    pub fn reset(&mut self, delay: &mut impl DelayUs) -> nb::Result<(), E> {
+    pub fn reset(&mut self) -> Result<(), E> {
         #[cfg(feature = "defmt")]
         debug!("Resetting device");
-        if !self.waiting_reset {
-            self.command(Command::SOFT_RST)?;
-            delay.delay_ms(100).unwrap(); // TODO: bad
-            self.waiting_reset = true;
-        }
-
-        if !self.is_ready()? {
-            #[cfg(feature = "defmt")]
-            trace!("Device hasn't set ready flag, sending WouldBlock");
-            return Err(nb::Error::WouldBlock);
-        }
-
-        self.waiting_reset = false;
+        self.command(Command::SOFT_RST)?;
         Ok(())
     }
 
@@ -235,7 +218,6 @@ where
             return Err(nb::Error::WouldBlock);
         }
 
-        self.waiting_reset = false;
         Ok(())
     }
 
@@ -363,16 +345,16 @@ where
     /// 1. Blocks on resetting the device with [`Self::reset`].
     /// 1. Sets settings for the onboard ADC (see [`Self::set_osr_channel`]).
     /// 1. Resets the configuration registers.
-    pub fn new(i2c: I, osr: OSR, ch: Channel, delay: &mut impl DelayUs) -> Result<Self, E> {
+    pub fn new(i2c: I, osr: OSR, ch: Channel) -> Result<Self, E> {
         #[cfg(feature = "defmt")]
         debug!("Creating new HP203B altimeter");
         let mut new = Self {
             i2c,
             _c: PhantomData,
-            waiting_reset: false,
             osr,
         };
-        nb::block!(new.reset(delay))?;
+        new.reset()?;
+        nb::block!(new.wait_ready())?;
         new.set_osr_channel(osr, ch)?;
         new.set_interrupts_enabled(INT_EN::RDY_EN)?;
         #[cfg(feature = "defmt")]
@@ -387,7 +369,6 @@ where
     pub fn to_altitude(self) -> Result<HP203B<I, mode::Altitude, C>, E> {
         let mut new = HP203B::<_, mode::Altitude, _> {
             _c: PhantomData,
-            waiting_reset: false,
             osr: self.osr,
             i2c: self.destroy(),
         };
@@ -488,7 +469,6 @@ where
     pub fn to_pressure(self) -> Result<HP203B<I, mode::Pressure, C>, E> {
         let mut new = HP203B::<_, mode::Pressure, _> {
             _c: PhantomData,
-            waiting_reset: false,
             osr: self.osr,
             i2c: self.destroy(),
         };

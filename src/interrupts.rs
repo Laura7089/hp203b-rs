@@ -8,14 +8,12 @@
 //! ```no_run
 //! use hp203b::interrupts::{Event, HasInterrupts, InterruptSetting};
 //! # use hp203b::{HP203B, OSR, Channel};
-//! # use embedded_hal_mock::{i2c::Mock, delay::StdSleep};
+//! # use embedded_hal_mock::{i2c::Mock};
 //! # fn main() -> Result<(), embedded_hal::i2c::ErrorKind> {
-//! # let mut delay = StdSleep::default();
 //! # let mut alti: HP203B<_, _, hp203b::csb::CSBLow> = HP203B::new(
 //! #     Mock::new(&[]),
 //! #     OSR::OSR128,
 //! #     Channel::Temperature,
-//! #     &mut delay,
 //! # )?;
 //!
 //! alti.set_pres_mid(100.0)?;
@@ -145,14 +143,11 @@ pub enum TraversalDirection {
 ///
 /// # use hp203b::{csb::{CSBLow, CSB}, OSR, Channel};
 /// # use embedded_hal_mock::i2c::{Mock, Transaction as Tr};
-/// # use embedded_hal_mock::delay::MockNoop;
 /// # fn main() -> Result<(), embedded_hal::i2c::ErrorKind> {
-/// # let mut delay = MockNoop::default();
 /// # let mut alti: HP203B<_, _, CSBLow> = HP203B::new(
 /// #   Mock::new(&[]),
 /// #   OSR::OSR128,
 /// #   Channel::Temperature,
-/// #   &mut delay,
 /// # )?;
 ///
 /// for event in alti.interrupts()? {

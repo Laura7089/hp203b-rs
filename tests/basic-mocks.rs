@@ -1,7 +1,6 @@
 use hp203b::*;
 
 use csb::CSB as _;
-use embedded_hal_mock::delay::MockNoop;
 use embedded_hal_mock::i2c::{Mock, Transaction};
 use once_cell::sync::Lazy;
 use rand::prelude::*;
@@ -107,12 +106,11 @@ const ALTI_VAL: Altitude = Altitude(26.52);
 
 macro_rules! altimeter {
     ($($seq:expr),*) => {{
-        let mut __delay = MockNoop::default();
         let mut __basic_seq = NEW.to_vec();
         $(
             __basic_seq.extend_from_slice($seq);
         )*
-        HP203B::new(Mock::new(&__basic_seq), OSR, CHAN, &mut __delay).unwrap()
+        HP203B::new(Mock::new(&__basic_seq), OSR, CHAN).unwrap()
     }};
 }
 
