@@ -1,5 +1,5 @@
 use crate::{Command, HP203B};
-use embedded_hal::i2c::blocking::I2c;
+use embedded_hal::i2c::I2c;
 
 /// Configure the I2C address select pin
 pub mod csb {

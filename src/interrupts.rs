@@ -268,7 +268,7 @@ pub trait HasInterrupts<E> {
 
 impl<I, M, C, E> HasInterrupts<E> for HP203B<I, M, C>
 where
-    I: embedded_hal::i2c::blocking::I2c<Error = E>,
+    I: embedded_hal::i2c::I2c<Error = E>,
     M: crate::mode::BarometricMeasurement,
     C: crate::csb::CSB,
 {

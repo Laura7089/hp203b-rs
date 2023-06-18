@@ -3,7 +3,7 @@
 use bitflags::bitflags;
 #[cfg(feature = "defmt")]
 use defmt::trace;
-use embedded_hal::i2c::blocking::I2c;
+use embedded_hal::i2c::I2c;
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug)]
