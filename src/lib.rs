@@ -37,6 +37,8 @@
 #![allow(clippy::enum_glob_use)]
 
 // TODO: remove user access to the `*_RDY` interrupts?
+// TODO: allow non-blocking reads
+// TODO: fixed-point decimal representation?
 
 mod flags;
 pub mod interrupts;
