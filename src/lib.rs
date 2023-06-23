@@ -282,18 +282,19 @@ where
     }
 
     /// Get temperature in celsius
-    pub fn read_temp(&mut self) -> Result<Temperature, E> {
+    pub fn read_temp(&mut self) -> Result<TemperatureGuard<I, M, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
-        nb::block!(self.inner_block(flags::INT_SRC::T_RDY))?;
-        Ok(self.read_one(Command::READ_T)?.into())
+
+        self.i2c.write(Self::ADDR, &[Command::READ_T as u8])?;
+        Ok(TemperatureGuard(self))
     }
 
-    fn read_one(&mut self, cmd: Command) -> Result<[u8; 3], E> {
+    fn read_one(&mut self) -> Result<[u8; 3], E> {
         let mut raw = [0; 3];
         #[cfg(feature = "defmt")]
-        trace!("Sending command {}", cmd);
-        self.i2c.write_read(Self::ADDR, &[cmd as u8], &mut raw)?;
+        trace!("Reading 3 bytes");
+        self.i2c.read(Self::ADDR, &mut raw)?;
         Ok(raw)
     }
 
@@ -554,6 +555,70 @@ where
         debug!("Reading altitude");
         nb::block!(self.inner_block(flags::INT_SRC::PA_RDY))?;
         Ok(self.read_one(Command::READ_A)?.into())
+    }
+}
+
+/// An RAII guard for a value read from an [`HP203B`]
+///
+/// This trait allows this driver to yield control flow while the altimeter generates a reading,
+/// while still enforcing exclusive access to the device.
+/// A typical flow (using [`HP203B::read_temp`]) might look like this:
+///
+/// ```no_run
+/// use hp203b::{HP203B, ReadGuard};
+/// # use hp203b::{csb::CSBLow, OSR, Channel};
+/// # use embedded_hal::i2c::ErrorKind;
+/// # use embedded_hal_mock::i2c::Mock;
+/// # fn main() -> Result<(), ErrorKind> {
+///
+/// let mut alti = {
+///     // ... initialise device
+/// # let i2c = Mock::new(&[]);
+/// # HP203B::<_, _, CSBLow>::new(
+/// #     i2c,
+/// #     OSR::OSR1024,
+/// #     Channel::SensorPressureTemperature,
+/// # )?
+/// };
+/// let mut temp_guard = alti.read_temp()?;
+///
+/// // do something else while the altimeter calculates...
+///
+/// let temp = nb::block!(temp_guard.try_take())?;
+/// println!("Temperature: {} degrees", temp.0);
+/// # Ok(()) }
+/// ```
+pub trait ReadGuard<T> {
+    /// Associated error type
+    ///
+    /// Will match the error type of the I2C given to [`HP203B`].
+    type Error;
+
+    /// Expected delay of this measurement being ready
+    fn delay(&self) -> MicrosDurationU32;
+    /// Read the value off the device or yield execution if not ready
+    fn try_take(&mut self) -> nb::Result<T, Self::Error>;
+}
+
+/// RAII Guard (see [`ReadGuard`]) for a temperature reading
+///
+/// Obtained with [`HP203B::read_temp`].
+pub struct TemperatureGuard<'a, I: I2c, M: mode::BarometricMeasurement, C: csb::CSB>(
+    &'a mut HP203B<I, M, C>,
+);
+
+impl<'a, I: I2c<Error = E>, M: mode::BarometricMeasurement, C: csb::CSB, E> ReadGuard<Temperature>
+    for TemperatureGuard<'a, I, M, C>
+{
+    type Error = E;
+
+    fn delay(&self) -> MicrosDurationU32 {
+        self.0.read_delay()
+    }
+
+    fn try_take(&mut self) -> nb::Result<Temperature, Self::Error> {
+        self.0.inner_block(flags::INT_SRC::T_RDY)?;
+        Ok(self.0.read_one()?.into())
     }
 }
 
