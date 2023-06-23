@@ -171,12 +171,14 @@ macro_rules! read_methods {
         #[$doc]
         ///
         /// Returns a [`ReadGuard`] type for asynchronous usage.
+        #[inline]
         pub fn [<read_ $kind>](&mut self) -> Result<
             $guard<I, $retmode, C>,
             E
         > {
-            #[cfg(feature = "defmt")]
-            debug!("Reading $kind");
+            // TODO: fix this
+            // #[cfg(feature = "defmt")]
+            // debug!("Reading $kind");
             self.i2c.write(Self::ADDR, &[$cmd as u8])?;
             Ok($guard(Some(self)))
         }
