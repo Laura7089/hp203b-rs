@@ -85,8 +85,7 @@ mod tests {
     #[test]
     fn read_temp((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay);
-        let mut guard = alti.read_temp().unwrap();
-        let t = nb::block!(guard.try_take()).unwrap();
+        let t = alti.read_temp_blocking().unwrap();
         info!("Temperature reading: {}", t);
         assert!(t.0 != 655.35); // From an issue we previously had
     }
@@ -94,8 +93,7 @@ mod tests {
     #[test]
     fn read_pressure((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay);
-        let mut guard = alti.read_pres().unwrap();
-        let p = nb::block!(guard.try_take()).unwrap();
+        let p = alti.read_pres_blocking().unwrap();
         info!("Pressure reading: {}", p);
         assert!(p.0 >= 0.0);
     }
@@ -103,8 +101,7 @@ mod tests {
     #[test]
     fn read_both_pres((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, 2 => delay);
-        let mut guard = alti.read_pres_temp().unwrap();
-        let (t, p) = nb::block!(guard.try_take()).unwrap();
+        let (t, p) = alti.read_pres_temp_blocking().unwrap();
         info!("Pressure: {}, temp: {}", p, t);
     }
 

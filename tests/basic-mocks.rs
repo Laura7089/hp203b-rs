@@ -146,7 +146,7 @@ fn create_new() {
 #[test]
 fn read_temp() {
     let mut alti = altimeter!(READ_TEMP.deref());
-    let measurement = nb::block!(alti.read_temp().unwrap().try_take()).unwrap();
+    let measurement = alti.read_temp_blocking().unwrap();
     assert_eq!(measurement, TEMP_VAL);
     alti.destroy().done();
 }
@@ -154,7 +154,7 @@ fn read_temp() {
 #[test]
 fn read_pressure() {
     let mut alti = altimeter!(READ_PRES.deref());
-    let measurement = nb::block!(alti.read_pres().unwrap().try_take()).unwrap();
+    let measurement = alti.read_pres_blocking().unwrap();
     assert_eq!(measurement, PRES_VAL);
     alti.destroy().done();
 }
@@ -164,7 +164,7 @@ fn read_alti() {
     let mut alti = altimeter!(TO_ALTI.deref(), READ_ALTI.deref())
         .to_altitude()
         .unwrap();
-    let measurement = nb::block!(alti.read_alti().unwrap().try_take()).unwrap();
+    let measurement = alti.read_alti_blocking().unwrap();
     assert_eq!(measurement, ALTI_VAL);
     alti.destroy().done();
 }

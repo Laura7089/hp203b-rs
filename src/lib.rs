@@ -290,6 +290,13 @@ where
         Ok(TemperatureGuard(Some(self)))
     }
 
+    /// Get temperature in celsius, block until ready
+    #[inline]
+    pub fn read_temp_blocking(&mut self) -> Result<Temperature, E> {
+        let mut guard = self.read_temp()?;
+        nb::block!(guard.try_take())
+    }
+
     fn read_one(&mut self) -> Result<[u8; 3], E> {
         let mut raw = [0; 3];
         #[cfg(feature = "defmt")]
@@ -449,12 +456,24 @@ where
         Ok(TemperaturePressureGuard(Some(self)))
     }
 
+    /// Read both the temperature and pressure, block until ready
+    pub fn read_pres_temp_blocking(&mut self) -> Result<(Temperature, Pressure), E> {
+        let mut guard = self.read_pres_temp()?;
+        nb::block!(guard.try_take())
+    }
+
     /// Read a pressure measurement
     pub fn read_pres(&mut self) -> Result<PressureGuard<I, mode::Pressure, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
         self.i2c.write(Self::ADDR, &[Command::READ_P as u8])?;
         Ok(PressureGuard(Some(self)))
+    }
+
+    /// Read a pressure measurement, block until ready
+    pub fn read_pres_blocking(&mut self) -> Result<Pressure, E> {
+        let mut guard = self.read_pres()?;
+        nb::block!(guard.try_take())
     }
 }
 
@@ -545,12 +564,24 @@ where
         Ok(TemperatureAltitudeGuard(Some(self)))
     }
 
+    /// Read both the temperature and altitude, block until ready
+    pub fn read_alti_temp_blocking(&mut self) -> Result<(Temperature, Altitude), E> {
+        let mut guard = self.read_alti_temp()?;
+        nb::block!(guard.try_take())
+    }
+
     /// Read an altitude measurement
     pub fn read_alti(&mut self) -> Result<AltitudeGuard<I, mode::Altitude, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
         self.i2c.write(Self::ADDR, &[Command::READ_A as u8])?;
         Ok(AltitudeGuard(Some(self)))
+    }
+
+    /// Read an altitude measurement, block until ready
+    pub fn read_alti_blocking(&mut self) -> Result<Altitude, E> {
+        let mut guard = self.read_alti()?;
+        nb::block!(guard.try_take())
     }
 }
 
