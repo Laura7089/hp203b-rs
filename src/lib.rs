@@ -165,26 +165,55 @@ enum Command {
     READ_T = 0x32,
 }
 
-macro_rules! read_methods_single {
-    ($kind:ident, $ret:ident, $cmd:expr, $retmode:ty) => {
+macro_rules! read_methods {
+    ($kind:ident, #[$doc:meta], $guard:ident, $ret:ty, $cmd:expr, $retmode:ty) => {
         paste::paste! {
-        #[doc = "Read a " $kind " measurement"]
+        #[$doc]
+        ///
+        /// Returns a [`ReadGuard`] type for asynchronous usage.
         pub fn [<read_ $kind>](&mut self) -> Result<
-            [<$ret Guard>]<I, $retmode, C>,
+            $guard<I, $retmode, C>,
             E
         > {
             #[cfg(feature = "defmt")]
             debug!("Reading $kind");
             self.i2c.write(Self::ADDR, &[$cmd as u8])?;
-            Ok([<$ret Guard>](Some(self)))
+            Ok($guard(Some(self)))
         }
 
-        #[doc = "Read a " $kind " measurement, block until ready"]
+        #[$doc]
+        #[doc = "(blocking)"]
+        ///
+        /// Blocks execution until the altimeter yields a measurement figure.
         #[inline]
         pub fn [<read_ $kind _blocking>](&mut self) -> Result<$ret, E> {
             let mut guard = self.[<read_ $kind>]()?;
             nb::block!(guard.try_take())
         }
+        }
+    };
+    ($kind:ident, $ret:ident, $cmd:expr, $retmode:ty) => {
+        paste::paste! {
+            read_methods!(
+                $kind,
+                #[doc = "Read a " $kind " measurement"],
+                [<$ret Guard>],
+                $ret,
+                $cmd,
+                $retmode
+            );
+        }
+    };
+    ($kind1:ident, $ret1:ident; $kind2:ident, $ret2:ident; $cmd:expr, $retmode:ty) => {
+        paste::paste! {
+            read_methods!(
+                [<$kind1 _ $kind2>],
+                #[doc = "Read a " $kind1 " and " $kind2 " measurement"],
+                [<$ret1 $ret2 Guard>],
+                ($ret1, $ret2),
+                $cmd,
+                $retmode
+            );
         }
     };
 }
@@ -306,7 +335,7 @@ where
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    read_methods_single!(temperature, Temperature, Command::READ_T, M);
+    read_methods!(temperature, Temperature, Command::READ_T, M);
 
     fn read_one(&mut self) -> Result<[u8; 3], E> {
         let mut raw = [0; 3];
@@ -459,33 +488,8 @@ where
         self.write_reg16u(Register16::PA_M_TH_LS, mid)
     }
 
-    /// Read both the temperature and pressure
-    pub fn read_pres_temp(&mut self) -> Result<TemperaturePressureGuard<I, mode::Pressure, C>, E> {
-        #[cfg(feature = "defmt")]
-        debug!("Reading temperature and pressure");
-        self.i2c.write(Self::ADDR, &[Command::READ_PT as u8])?;
-        Ok(TemperaturePressureGuard(Some(self)))
-    }
-
-    /// Read both the temperature and pressure, block until ready
-    pub fn read_pres_temp_blocking(&mut self) -> Result<(Temperature, Pressure), E> {
-        let mut guard = self.read_pres_temp()?;
-        nb::block!(guard.try_take())
-    }
-
-    /// Read a pressure measurement
-    pub fn read_pres(&mut self) -> Result<PressureGuard<I, mode::Pressure, C>, E> {
-        #[cfg(feature = "defmt")]
-        debug!("Reading pressure");
-        self.i2c.write(Self::ADDR, &[Command::READ_P as u8])?;
-        Ok(PressureGuard(Some(self)))
-    }
-
-    /// Read a pressure measurement, block until ready
-    pub fn read_pres_blocking(&mut self) -> Result<Pressure, E> {
-        let mut guard = self.read_pres()?;
-        nb::block!(guard.try_take())
-    }
+    read_methods!(pressure, Pressure, Command::READ_P, mode::Pressure);
+    read_methods!(temperature, Temperature; pressure, Pressure; Command::READ_PT, mode::Pressure);
 }
 
 impl<I, E, C> HP203B<I, mode::Altitude, C>
@@ -567,21 +571,8 @@ where
         self.write_reg16s(Register16::PA_M_TH_LS, mid)
     }
 
-    /// Read both the temperature and altitude
-    pub fn read_alti_temp(&mut self) -> Result<TemperatureAltitudeGuard<I, mode::Altitude, C>, E> {
-        #[cfg(feature = "defmt")]
-        debug!("Reading altitude and temperature");
-        self.i2c.write(Self::ADDR, &[Command::READ_AT as u8])?;
-        Ok(TemperatureAltitudeGuard(Some(self)))
-    }
-
-    /// Read both the temperature and altitude, block until ready
-    pub fn read_alti_temp_blocking(&mut self) -> Result<(Temperature, Altitude), E> {
-        let mut guard = self.read_alti_temp()?;
-        nb::block!(guard.try_take())
-    }
-
-    read_methods_single!(altitude, Altitude, Command::READ_A, mode::Altitude);
+    read_methods!(altitude, Altitude, Command::READ_A, mode::Altitude);
+    read_methods!(temperature, Temperature; altitude, Altitude; Command::READ_AT, mode::Altitude);
 }
 
 /// An RAII guard for a value read from an [`HP203B`]
