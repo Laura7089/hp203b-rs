@@ -697,6 +697,7 @@ macro_rules! reading_impl {
         #[doc = $kind " reading, in"]
         #[doc = $unit]
         #[derive(Copy, Clone, Debug, PartialEq)]
+        #[repr(transparent)]
         pub struct $kind(pub f32);
         impl From<&[u8]> for $kind {
             fn from(reading: &[u8]) -> Self {

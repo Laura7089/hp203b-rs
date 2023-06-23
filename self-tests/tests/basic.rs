@@ -46,6 +46,8 @@ mod tests {
     const DEF_OSR: hp203b::OSR = hp203b::OSR::OSR1024;
     const DEF_CHANNEL: hp203b::Channel = hp203b::Channel::SensorPressureTemperature;
 
+    // TODO: use bob-bsp for this with sensor support disabled
+
     #[init]
     fn setup() -> (I2C, Delay) {
         let mut perips = pac::Peripherals::take().unwrap();
@@ -67,9 +69,9 @@ mod tests {
                 perips.I2C0,
                 pins.gpio16.into_mode(),
                 pins.gpio17.into_mode(),
-                400.kHz(),
+                100.kHz(),
                 &mut perips.RESETS,
-                125.MHz(),
+                130.MHz(),
             ),
             delay,
         )
