@@ -287,7 +287,7 @@ where
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
         self.i2c.write(Self::ADDR, &[Command::READ_T as u8])?;
-        Ok(TemperatureGuard(self))
+        Ok(TemperatureGuard(Some(self)))
     }
 
     fn read_one(&mut self) -> Result<[u8; 3], E> {
@@ -446,7 +446,7 @@ where
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
         self.i2c.write(Self::ADDR, &[Command::READ_PT as u8])?;
-        Ok(TemperaturePressureGuard(self))
+        Ok(TemperaturePressureGuard(Some(self)))
     }
 
     /// Read a pressure measurement
@@ -454,7 +454,7 @@ where
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
         self.i2c.write(Self::ADDR, &[Command::READ_P as u8])?;
-        Ok(PressureGuard(self))
+        Ok(PressureGuard(Some(self)))
     }
 }
 
@@ -542,7 +542,7 @@ where
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
         self.i2c.write(Self::ADDR, &[Command::READ_AT as u8])?;
-        Ok(TemperatureAltitudeGuard(self))
+        Ok(TemperatureAltitudeGuard(Some(self)))
     }
 
     /// Read an altitude measurement
@@ -550,7 +550,7 @@ where
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
         self.i2c.write(Self::ADDR, &[Command::READ_A as u8])?;
-        Ok(AltitudeGuard(self))
+        Ok(AltitudeGuard(Some(self)))
     }
 }
 
@@ -593,57 +593,69 @@ pub trait ReadGuard<T> {
     /// Expected delay of this measurement being ready
     fn delay(&self) -> MicrosDurationU32;
     /// Read the value off the device or yield execution if not ready
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value has previously been taken.
     fn try_take(&mut self) -> nb::Result<T, Self::Error>;
 }
 
+macro_rules! readguard_impl_inner {
+    ($name:ident, $rettype:ty, $flag:expr, $reader:path, $conv:path, #[$doc:meta]) => {
+        #[$doc]
+        pub struct $name<'a, I: I2c, M: mode::BarometricMeasurement, C: csb::CSB>(
+            Option<&'a mut HP203B<I, M, C>>,
+        );
+
+        impl<'a, I: I2c<Error = E>, M: mode::BarometricMeasurement, C: csb::CSB, E>
+            ReadGuard<$rettype> for $name<'a, I, M, C>
+        {
+            type Error = E;
+
+            fn delay(&self) -> MicrosDurationU32 {
+                self.0.as_ref().expect("Reading already used").read_delay()
+            }
+
+            fn try_take(&mut self) -> nb::Result<$rettype, Self::Error> {
+                self.0
+                    .as_mut()
+                    .expect("Reading already used")
+                    .inner_block($flag)?;
+                let dev = self.0.take().unwrap();
+                let read = $reader(dev)?;
+                Ok($conv(read))
+            }
+        }
+    };
+}
 macro_rules! readguard_impl {
     ($kind:ident, $flag:expr) => {
         paste::paste! {
+        readguard_impl_inner!(
+            [<$kind Guard>],
+            $kind,
+            $flag,
+            HP203B::read_one,
+            Into::into,
             #[doc = "RAII Guard (see [`ReadGuard`]) for a [`" $kind "`] reading"]
-            pub struct [<$kind Guard>]<'a, I: I2c, M: mode::BarometricMeasurement, C: csb::CSB>(
-                &'a mut HP203B<I, M, C>,
-            );
-
-            impl<'a, I: I2c<Error = E>, M: mode::BarometricMeasurement, C: csb::CSB, E>
-                ReadGuard<$kind> for [<$kind Guard>]<'a, I, M, C>
-            {
-                type Error = E;
-
-                fn delay(&self) -> MicrosDurationU32 {
-                    self.0.read_delay()
-                }
-
-                fn try_take(&mut self) -> nb::Result<$kind, Self::Error> {
-                    self.0.inner_block($flag)?;
-                    Ok(self.0.read_one()?.into())
-                }
-            }
+        );
         }
     };
     ($kind1:ident, $kind2:ident, $flag:expr) => {
         paste::paste! {
+        #[allow(non_snake_case)]
+        #[inline(always)]
+        fn [<__ $kind1 $kind2 conv>](val: [u8; 6]) -> ($kind1, $kind2) {
+            (val[0..3].into(), val[3..6].into())
+        }
+        readguard_impl_inner!(
+            [<$kind1 $kind2 Guard>],
+            ($kind1, $kind2),
+            $flag,
+            HP203B::read_two,
+            [<__ $kind1 $kind2 conv>],
             #[doc = "RAII Guard (see [`ReadGuard`]) for a reading of [`" $kind1 "`] and [`" $kind2 "`]"]
-            pub struct [<$kind1 $kind2 Guard>]<'a, I: I2c, M: mode::BarometricMeasurement, C: csb::CSB>(
-                &'a mut HP203B<I, M, C>,
-            );
-
-            impl<'a, I: I2c<Error = E>, M: mode::BarometricMeasurement, C: csb::CSB, E>
-                ReadGuard<($kind1, $kind2)> for [<$kind1 $kind2 Guard>]<'a, I, M, C>
-            {
-                type Error = E;
-
-                fn delay(&self) -> MicrosDurationU32 {
-                    self.0.read_delay()
-                }
-
-                fn try_take(&mut self) -> nb::Result<($kind1, $kind2), Self::Error> {
-                    self.0.inner_block($flag)?;
-                    let raw = self.0.read_two()?;
-                    let first: $kind1 = raw[0..3].into();
-                    let second: $kind2 = raw[3..6].into();
-                    Ok((first, second))
-                }
-            }
+        );
         }
     };
 }
@@ -682,7 +694,6 @@ fn read_unsigned(reading: &[u8]) -> f32 {
 macro_rules! reading_impl {
     ($kind:ident, $unit:expr, $reader:path) => {
         paste::paste! {
-
         #[doc = $kind " reading, in"]
         #[doc = $unit]
         #[derive(Copy, Clone, Debug, PartialEq)]
@@ -706,7 +717,6 @@ macro_rules! reading_impl {
                 defmt::write!(f, "{}{}", self.0, $unit);
             }
         }
-
         }
     };
 }
