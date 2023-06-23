@@ -15,6 +15,7 @@ defmt = { version = "0.3.2", optional = true }
 embedded-hal = "=1.0.0-alpha.10"
 fugit = "0.3.6"
 nb = "1.0.0"
+paste = "1.0.12"
 
 [dev-dependencies]
 test-case = "2.2.1"
