@@ -39,6 +39,7 @@
 // TODO: remove user access to the `*_RDY` interrupts?
 // TODO: allow non-blocking reads
 // TODO: fixed-point decimal representation?
+// TODO: RAII guards for value reads w/ attached delay, panic on reuse
 
 mod flags;
 pub mod interrupts;
