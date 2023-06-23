@@ -146,7 +146,7 @@ fn create_new() {
 #[test]
 fn read_temp() {
     let mut alti = altimeter!(READ_TEMP.deref());
-    let measurement = alti.read_temp_blocking().unwrap();
+    let measurement = alti.read_temperature_blocking().unwrap();
     assert_eq!(measurement, TEMP_VAL);
     alti.destroy().done();
 }
@@ -164,7 +164,7 @@ fn read_alti() {
     let mut alti = altimeter!(TO_ALTI.deref(), READ_ALTI.deref())
         .to_altitude()
         .unwrap();
-    let measurement = alti.read_alti_blocking().unwrap();
+    let measurement = alti.read_altitude_blocking().unwrap();
     assert_eq!(measurement, ALTI_VAL);
     alti.destroy().done();
 }

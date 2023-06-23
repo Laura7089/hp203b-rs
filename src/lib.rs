@@ -18,7 +18,7 @@
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
-//! let mut alti_guard = altimeter.read_alti()?;
+//! let mut alti_guard = altimeter.read_altitude()?;
 //! let alti = nb::block!(alti_guard.try_take())?;
 //! println!("Altitude: {}m", alti.0);
 //! # Ok(())
@@ -174,12 +174,13 @@ macro_rules! read_methods_single {
             E
         > {
             #[cfg(feature = "defmt")]
-            debug!("Reading {}", $full);
+            debug!("Reading $kind");
             self.i2c.write(Self::ADDR, &[$cmd as u8])?;
             Ok([<$ret Guard>](Some(self)))
         }
 
         #[doc = "Read a " $kind " measurement, block until ready"]
+        #[inline]
         pub fn [<read_ $kind _blocking>](&mut self) -> Result<$ret, E> {
             let mut guard = self.[<read_ $kind>]()?;
             nb::block!(guard.try_take())
