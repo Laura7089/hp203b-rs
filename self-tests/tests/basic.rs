@@ -36,8 +36,6 @@ mod tests {
     use hal::{gpio, i2c, pac};
     use rp2040_hal as hal;
 
-    use hp203b::ReadGuard;
-
     type I2CPin<P> = gpio::Pin<P, gpio::Function<gpio::I2C>>;
     type I2C = i2c::I2C<pac::I2C0, (I2CPin<gpio::bank0::Gpio16>, I2CPin<gpio::bank0::Gpio17>)>;
 
@@ -93,7 +91,7 @@ mod tests {
     #[test]
     fn read_pressure((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay);
-        let p = alti.read_pres_blocking().unwrap();
+        let p = alti.read_pressure_blocking().unwrap();
         info!("Pressure reading: {}", p);
         assert!(p.0 >= 0.0);
     }
@@ -101,21 +99,23 @@ mod tests {
     #[test]
     fn read_both_pres((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, 2 => delay);
-        let (t, p) = alti.read_pres_temp_blocking().unwrap();
+        let (t, p) = alti.read_temperature_pressure_blocking().unwrap();
         info!("Pressure: {}, temp: {}", p, t);
     }
 
     #[test]
     fn read_alti((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay).to_altitude().unwrap();
-        info!("Altitude reading: {}", alti.read_altitude().unwrap());
+        info!(
+            "Altitude reading: {}",
+            alti.read_altitude_blocking().unwrap()
+        );
     }
 
     #[test]
     fn read_both_alti((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay).to_altitude().unwrap();
-        let mut guard = alti.read_alti_temp().unwrap();
-        let (t, a) = nb::block!(guard.try_take()).unwrap();
+        let (t, a) = alti.read_temperature_altitude_blocking().unwrap();
         info!("Altitude: {}, temp: {}", a, t);
     }
 }

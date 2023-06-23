@@ -154,7 +154,7 @@ fn read_temp() {
 #[test]
 fn read_pressure() {
     let mut alti = altimeter!(READ_PRES.deref());
-    let measurement = alti.read_pres_blocking().unwrap();
+    let measurement = alti.read_pressure_blocking().unwrap();
     assert_eq!(measurement, PRES_VAL);
     alti.destroy().done();
 }
