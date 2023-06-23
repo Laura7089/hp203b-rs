@@ -285,7 +285,6 @@ where
     pub fn read_temp(&mut self) -> Result<TemperatureGuard<I, M, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature");
-
         self.i2c.write(Self::ADDR, &[Command::READ_T as u8])?;
         Ok(TemperatureGuard(self))
     }
@@ -442,20 +441,19 @@ where
     }
 
     /// Read both the temperature and pressure
-    pub fn read_pres_temp(&mut self) -> Result<(Temperature, Pressure), E> {
+    pub fn read_pres_temp(&mut self) -> Result<TemperaturePressureGuard<I, mode::Pressure, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading temperature and pressure");
-        nb::block!(self.inner_block(flags::INT_SRC::READ_RDY))?;
-        let raw = self.read_two(Command::READ_PT)?;
-        Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
+        self.i2c.write(Self::ADDR, &[Command::READ_PT as u8])?;
+        Ok(TemperaturePressureGuard(self))
     }
 
     /// Read a pressure measurement
-    pub fn read_pres(&mut self) -> Result<Pressure, E> {
+    pub fn read_pres(&mut self) -> Result<PressureGuard<I, mode::Pressure, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading pressure");
-        nb::block!(self.inner_block(flags::INT_SRC::PA_RDY))?;
-        Ok(self.read_one(Command::READ_P)?.into())
+        self.i2c.write(Self::ADDR, &[Command::READ_P as u8])?;
+        Ok(PressureGuard(self))
     }
 }
 
@@ -539,20 +537,19 @@ where
     }
 
     /// Read both the temperature and altitude
-    pub fn read_alti_temp(&mut self) -> Result<(Temperature, Altitude), E> {
+    pub fn read_alti_temp(&mut self) -> Result<TemperatureAltitudeGuard<I, mode::Altitude, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude and temperature");
-        nb::block!(self.inner_block(flags::INT_SRC::READ_RDY))?;
-        let raw = self.read_two(Command::READ_AT)?;
-        Ok(((&raw[0..3]).into(), (&raw[3..6]).into()))
+        self.i2c.write(Self::ADDR, &[Command::READ_AT as u8])?;
+        Ok(TemperatureAltitudeGuard(self))
     }
 
     /// Read an altitude measurement
-    pub fn read_alti(&mut self) -> Result<Altitude, E> {
+    pub fn read_alti(&mut self) -> Result<AltitudeGuard<I, mode::Altitude, C>, E> {
         #[cfg(feature = "defmt")]
         debug!("Reading altitude");
-        nb::block!(self.inner_block(flags::INT_SRC::PA_RDY))?;
-        Ok(self.read_one(Command::READ_A)?.into())
+        self.i2c.write(Self::ADDR, &[Command::READ_A as u8])?;
+        Ok(AltitudeGuard(self))
     }
 }
 
@@ -653,8 +650,8 @@ macro_rules! readguard_impl {
 readguard_impl!(Temperature, flags::INT_SRC::T_RDY);
 readguard_impl!(Pressure, flags::INT_SRC::PA_RDY);
 readguard_impl!(Altitude, flags::INT_SRC::PA_RDY);
-readguard_impl!(Temperature, Pressure, flags::INT_SRC::PA_RDY);
-readguard_impl!(Temperature, Altitude, flags::INT_SRC::PA_RDY);
+readguard_impl!(Temperature, Pressure, flags::INT_SRC::READ_RDY);
+readguard_impl!(Temperature, Altitude, flags::INT_SRC::READ_RDY);
 
 fn read_signed(reading: &[u8]) -> f32 {
     assert!(reading.len() == 3);
