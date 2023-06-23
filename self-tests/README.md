@@ -1,7 +1,7 @@
 # Hardware Tests
 
 A sub-crate for unit testing `hp203b` on real hardware with [`defmt-test`](https://github.com/knurling-rs/defmt) and [`probe-run`](https://github.com/knurling-rs/probe-run).
-Setup for usage with [Bob]().
+Setup for usage with [Bob](https://github.com/yorkaerospace/Bob).
 
 Created following the guidance [here](https://ferrous-systems.com/blog/test-driver-crate/#target-testing-with-defmt-test).
 
