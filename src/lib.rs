@@ -3,7 +3,7 @@
 //! ## Examples
 //!
 //! ```no_run
-//! use hp203b::{HP203B, csb::CSBLow, OSR, Channel};
+//! use hp203b::{HP203B, ReadGuard, csb::CSBLow, OSR, Channel};
 //! # use embedded_hal::i2c::ErrorKind;
 //! # use embedded_hal_mock::i2c::Mock;
 //! # fn main() -> Result<(), ErrorKind> {
@@ -18,7 +18,8 @@
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
-//! let alti = altimeter.read_alti()?;
+//! let mut alti_guard = altimeter.read_alti()?;
+//! let alti = nb::block!(alti_guard.try_take())?;
 //! println!("Altitude: {}m", alti.0);
 //! # Ok(())
 //! # }

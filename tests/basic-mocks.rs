@@ -33,6 +33,12 @@ macro_rules! wr {
     }
 }
 
+macro_rules! r {
+    ($($rbyte:expr),*) => {
+        Transaction::read( CSB::ADDR, vec![ $($rbyte,)* ],)
+    }
+}
+
 const OSR: hp203b::OSR = hp203b::OSR::OSR1024;
 const CHAN: hp203b::Channel = hp203b::Channel::SensorPressureTemperature;
 static NEW: Lazy<[Transaction; 4]> = Lazy::new(|| {
@@ -48,22 +54,26 @@ static NEW: Lazy<[Transaction; 4]> = Lazy::new(|| {
     ]
 });
 
-static READ_TEMP: Lazy<[Transaction; 2]> = Lazy::new(|| {
+static READ_TEMP: Lazy<[Transaction; 3]> = Lazy::new(|| {
     [
+        // READ_T
+        w!(0x32),
         // Check temp is ready
         wr!(0x80 + 0x0d; 0b0001_0000),
-        // READ_T
-        wr!(0x32; 0x00, 0x0A, 0x5C),
+        // Read value
+        r!(0x00, 0x0A, 0x5C),
     ]
 });
 const TEMP_VAL: Temperature = Temperature(26.52);
 
-static READ_PRES: Lazy<[Transaction; 2]> = Lazy::new(|| {
+static READ_PRES: Lazy<[Transaction; 3]> = Lazy::new(|| {
     [
+        // READ_P
+        w!(0x30),
         // Check pressure is ready
         wr!(0x80 + 0x0d; 0b0010_0000),
-        // READ_P
-        wr!(0x30; 0x00, 0x0A, 0x5C),
+        // Read value
+        r!(0x00, 0x0A, 0x5C),
     ]
 });
 const PRES_VAL: Pressure = Pressure(26.52);
@@ -94,12 +104,14 @@ static TO_ALTI: Lazy<[Transaction; 12]> = Lazy::new(|| {
     ]
 });
 
-static READ_ALTI: Lazy<[Transaction; 2]> = Lazy::new(|| {
+static READ_ALTI: Lazy<[Transaction; 3]> = Lazy::new(|| {
     [
+        // READ_A
+        w!(0x31),
         // Check alti is ready
         wr!(0x80 + 0x0d; 0b0010_0000),
-        // Read alti
-        wr!(0x31; 0x00, 0x0A, 0x5C),
+        // Read value
+        r!(0x00, 0x0A, 0x5C),
     ]
 });
 const ALTI_VAL: Altitude = Altitude(26.52);
@@ -134,14 +146,16 @@ fn create_new() {
 #[test]
 fn read_temp() {
     let mut alti = altimeter!(READ_TEMP.deref());
-    assert_eq!(alti.read_temp().unwrap(), TEMP_VAL);
+    let measurement = nb::block!(alti.read_temp().unwrap().try_take()).unwrap();
+    assert_eq!(measurement, TEMP_VAL);
     alti.destroy().done();
 }
 
 #[test]
 fn read_pressure() {
     let mut alti = altimeter!(READ_PRES.deref());
-    assert_eq!(alti.read_pres().unwrap(), PRES_VAL);
+    let measurement = nb::block!(alti.read_pres().unwrap().try_take()).unwrap();
+    assert_eq!(measurement, PRES_VAL);
     alti.destroy().done();
 }
 
@@ -150,6 +164,7 @@ fn read_alti() {
     let mut alti = altimeter!(TO_ALTI.deref(), READ_ALTI.deref())
         .to_altitude()
         .unwrap();
-    assert_eq!(alti.read_alti().unwrap(), ALTI_VAL);
+    let measurement = nb::block!(alti.read_alti().unwrap().try_take()).unwrap();
+    assert_eq!(measurement, ALTI_VAL);
     alti.destroy().done();
 }
