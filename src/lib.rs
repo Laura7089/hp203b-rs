@@ -581,74 +581,41 @@ fn read_unsigned(reading: &[u8]) -> f32 {
     signed as f32
 }
 
-/// A pressure reading, in mBar
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Pressure(pub f32);
-impl From<&[u8]> for Pressure {
-    fn from(reading: &[u8]) -> Self {
-        let res = read_unsigned(reading) / 100.0;
+macro_rules! reading_impl {
+    ($kind:ident, $unit:expr, $reader:path) => {
+        paste::paste! {
+
+        #[doc = $kind " reading, in"]
+        #[doc = $unit]
+        #[derive(Copy, Clone, Debug, PartialEq)]
+        pub struct $kind(pub f32);
+        impl From<&[u8]> for $kind {
+            fn from(reading: &[u8]) -> Self {
+                let res = $reader(reading) / 100.0;
+                #[cfg(feature = "defmt")]
+                trace!("Converted raw output {} to {}", reading, res);
+                Self(res)
+            }
+        }
+        impl From<[u8; 3]> for $kind {
+            fn from(reading: [u8; 3]) -> Self {
+                <Self as From<&[u8]>>::from(&reading)
+            }
+        }
         #[cfg(feature = "defmt")]
-        trace!("Converted raw output {} to pressure {}mBar", reading, res);
-        Self(res)
-    }
-}
-impl From<[u8; 3]> for Pressure {
-    fn from(reading: [u8; 3]) -> Self {
-        <Self as From<&[u8]>>::from(&reading)
-    }
-}
-#[cfg(feature = "defmt")]
-impl defmt::Format for Pressure {
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}mBar", self.0);
-    }
+        impl defmt::Format for $kind {
+            fn format(&self, f: defmt::Formatter) {
+                defmt::write!(f, "{}{}", self.0, $unit);
+            }
+        }
+
+        }
+    };
 }
 
-/// An altitude reading, in metres
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Altitude(pub f32);
-impl From<&[u8]> for Altitude {
-    fn from(reading: &[u8]) -> Self {
-        let res = read_signed(reading) / 100.0;
-        #[cfg(feature = "defmt")]
-        trace!("Converted raw output {} to altitude {}m", reading, res);
-        Self(res)
-    }
-}
-impl From<[u8; 3]> for Altitude {
-    fn from(reading: [u8; 3]) -> Self {
-        <Self as From<&[u8]>>::from(&reading)
-    }
-}
-#[cfg(feature = "defmt")]
-impl defmt::Format for Altitude {
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}m", self.0);
-    }
-}
-
-/// A temperature reading, in degrees celsius
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Temperature(pub f32);
-impl From<&[u8]> for Temperature {
-    fn from(reading: &[u8]) -> Self {
-        let res = read_signed(reading) / 100.0;
-        #[cfg(feature = "defmt")]
-        trace!("Converted raw output {} to temp {}°C", reading, res);
-        Self(res)
-    }
-}
-impl From<[u8; 3]> for Temperature {
-    fn from(reading: [u8; 3]) -> Self {
-        <Self as From<&[u8]>>::from(&reading)
-    }
-}
-#[cfg(feature = "defmt")]
-impl defmt::Format for Temperature {
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}°C", self.0);
-    }
-}
+reading_impl!(Pressure, "mBar", read_unsigned);
+reading_impl!(Altitude, "m", read_signed);
+reading_impl!(Temperature, "°C", read_signed);
 
 // TODO: more tests
 #[cfg(test)]
