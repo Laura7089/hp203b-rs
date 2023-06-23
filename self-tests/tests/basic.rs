@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn read_temp((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay);
-        let t = alti.read_temperature_blocking().unwrap();
+        let t = alti.read_temp_blocking().unwrap();
         info!("Temperature reading: {}", t);
         assert!(t.0 != 655.35); // From an issue we previously had
     }
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn read_pressure((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay);
-        let p = alti.read_pressure_blocking().unwrap();
+        let p = alti.read_pres_blocking().unwrap();
         info!("Pressure reading: {}", p);
         assert!(p.0 >= 0.0);
     }
@@ -99,23 +99,20 @@ mod tests {
     #[test]
     fn read_both_pres((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, 2 => delay);
-        let (t, p) = alti.read_temperature_pressure_blocking().unwrap();
+        let (t, p) = alti.read_pres_temp_blocking().unwrap();
         info!("Pressure: {}, temp: {}", p, t);
     }
 
     #[test]
     fn read_alti((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay).to_altitude().unwrap();
-        info!(
-            "Altitude reading: {}",
-            alti.read_altitude_blocking().unwrap()
-        );
+        info!("Altitude reading: {}", alti.read_alti_blocking().unwrap());
     }
 
     #[test]
     fn read_both_alti((i2c, delay): &mut (I2C, Delay)) {
         let mut alti = test_alti!(i2c, delay).to_altitude().unwrap();
-        let (t, a) = alti.read_temperature_altitude_blocking().unwrap();
+        let (t, a) = alti.read_alti_temp_blocking().unwrap();
         info!("Altitude: {}, temp: {}", a, t);
     }
 }

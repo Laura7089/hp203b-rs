@@ -18,7 +18,7 @@
 //! )?;
 //! let mut altimeter = altimeter.to_altitude()?;
 //! altimeter.set_offset(1000)?; // We're 1000m above sea level
-//! let mut alti_guard = altimeter.read_altitude()?;
+//! let mut alti_guard = altimeter.read_alti()?;
 //! let alti = nb::block!(alti_guard.try_take())?;
 //! println!("Altitude: {}m", alti.0);
 //! # Ok(())
@@ -165,7 +165,7 @@ enum Command {
     READ_T = 0x32,
 }
 
-macro_rules! read_methods {
+macro_rules! read_methods_inner {
     ($kind:ident, #[$doc:meta], $guard:ident, $ret:ty, $cmd:expr, $retmode:ty) => {
         paste::paste! {
         #[$doc]
@@ -194,11 +194,14 @@ macro_rules! read_methods {
         }
         }
     };
-    ($kind:ident, $ret:ident, $cmd:expr, $retmode:ty) => {
+}
+
+macro_rules! read_methods {
+    ($kind:ident -> $ret:ident; $cmd:expr, $retmode:ty) => {
         paste::paste! {
-            read_methods!(
+            read_methods_inner!(
                 $kind,
-                #[doc = "Read a " $kind " measurement"],
+                #[doc = "Read a [`" $ret "`]"],
                 [<$ret Guard>],
                 $ret,
                 $cmd,
@@ -206,11 +209,11 @@ macro_rules! read_methods {
             );
         }
     };
-    ($kind1:ident, $ret1:ident; $kind2:ident, $ret2:ident; $cmd:expr, $retmode:ty) => {
+    ($kind1:ident $kind2:ident -> ($ret1:ident, $ret2:ident); $cmd:expr, $retmode:ty) => {
         paste::paste! {
-            read_methods!(
-                [<$kind1 _ $kind2>],
-                #[doc = "Read a " $kind1 " and " $kind2 " measurement"],
+            read_methods_inner!(
+                [<$kind2 _ $kind1>],
+                #[doc = "Read a [`" $ret1 "`] and [`" $ret2 "`] simultaneously"],
                 [<$ret1 $ret2 Guard>],
                 ($ret1, $ret2),
                 $cmd,
@@ -337,7 +340,7 @@ where
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    read_methods!(temperature, Temperature, Command::READ_T, M);
+    read_methods!(temp -> Temperature; Command::READ_T, M);
 
     fn read_one(&mut self) -> Result<[u8; 3], E> {
         let mut raw = [0; 3];
@@ -490,8 +493,12 @@ where
         self.write_reg16u(Register16::PA_M_TH_LS, mid)
     }
 
-    read_methods!(pressure, Pressure, Command::READ_P, mode::Pressure);
-    read_methods!(temperature, Temperature; pressure, Pressure; Command::READ_PT, mode::Pressure);
+    read_methods!(
+        pres -> Pressure;
+        Command::READ_P,
+        mode::Pressure
+    );
+    read_methods!(temp pres -> (Temperature, Pressure); Command::READ_PT, mode::Pressure);
 }
 
 impl<I, E, C> HP203B<I, mode::Altitude, C>
@@ -573,15 +580,15 @@ where
         self.write_reg16s(Register16::PA_M_TH_LS, mid)
     }
 
-    read_methods!(altitude, Altitude, Command::READ_A, mode::Altitude);
-    read_methods!(temperature, Temperature; altitude, Altitude; Command::READ_AT, mode::Altitude);
+    read_methods!(alti -> Altitude; Command::READ_A, mode::Altitude);
+    read_methods!(temp alti -> (Temperature, Altitude); Command::READ_AT, mode::Altitude);
 }
 
 /// An RAII guard for a value read from an [`HP203B`]
 ///
 /// This trait allows this driver to yield control flow while the altimeter generates a reading,
 /// while still enforcing exclusive access to the device.
-/// A typical flow (using [`HP203B::read_temperature`]) might look like this:
+/// A typical flow (using [`HP203B::read_temp`]) might look like this:
 ///
 /// ```no_run
 /// use hp203b::{HP203B, ReadGuard};
@@ -599,7 +606,7 @@ where
 /// #     Channel::SensorPressureTemperature,
 /// # )?
 /// };
-/// let mut temp_guard = alti.read_temperature()?;
+/// let mut temp_guard = alti.read_temp()?;
 ///
 /// // do something else while the altimeter calculates...
 ///
