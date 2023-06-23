@@ -165,6 +165,29 @@ enum Command {
     READ_T = 0x32,
 }
 
+macro_rules! read_methods_single {
+    ($kind:ident, $ret:ident, $cmd:expr, $retmode:ty) => {
+        paste::paste! {
+        #[doc = "Read a " $kind " measurement"]
+        pub fn [<read_ $kind>](&mut self) -> Result<
+            [<$ret Guard>]<I, $retmode, C>,
+            E
+        > {
+            #[cfg(feature = "defmt")]
+            debug!("Reading {}", $full);
+            self.i2c.write(Self::ADDR, &[$cmd as u8])?;
+            Ok([<$ret Guard>](Some(self)))
+        }
+
+        #[doc = "Read a " $kind " measurement, block until ready"]
+        pub fn [<read_ $kind _blocking>](&mut self) -> Result<$ret, E> {
+            let mut guard = self.[<read_ $kind>]()?;
+            nb::block!(guard.try_take())
+        }
+        }
+    };
+}
+
 impl<I, E, M, C> HP203B<I, M, C>
 where
     I: I2c<Error = E>,
@@ -282,20 +305,7 @@ where
         Ok(self.para()?.contains(flags::PARA::CMPS_EN))
     }
 
-    /// Get temperature in celsius
-    pub fn read_temp(&mut self) -> Result<TemperatureGuard<I, M, C>, E> {
-        #[cfg(feature = "defmt")]
-        debug!("Reading temperature");
-        self.i2c.write(Self::ADDR, &[Command::READ_T as u8])?;
-        Ok(TemperatureGuard(Some(self)))
-    }
-
-    /// Get temperature in celsius, block until ready
-    #[inline]
-    pub fn read_temp_blocking(&mut self) -> Result<Temperature, E> {
-        let mut guard = self.read_temp()?;
-        nb::block!(guard.try_take())
-    }
+    read_methods_single!(temperature, Temperature, Command::READ_T, M);
 
     fn read_one(&mut self) -> Result<[u8; 3], E> {
         let mut raw = [0; 3];
@@ -570,26 +580,14 @@ where
         nb::block!(guard.try_take())
     }
 
-    /// Read an altitude measurement
-    pub fn read_alti(&mut self) -> Result<AltitudeGuard<I, mode::Altitude, C>, E> {
-        #[cfg(feature = "defmt")]
-        debug!("Reading altitude");
-        self.i2c.write(Self::ADDR, &[Command::READ_A as u8])?;
-        Ok(AltitudeGuard(Some(self)))
-    }
-
-    /// Read an altitude measurement, block until ready
-    pub fn read_alti_blocking(&mut self) -> Result<Altitude, E> {
-        let mut guard = self.read_alti()?;
-        nb::block!(guard.try_take())
-    }
+    read_methods_single!(altitude, Altitude, Command::READ_A, mode::Altitude);
 }
 
 /// An RAII guard for a value read from an [`HP203B`]
 ///
 /// This trait allows this driver to yield control flow while the altimeter generates a reading,
 /// while still enforcing exclusive access to the device.
-/// A typical flow (using [`HP203B::read_temp`]) might look like this:
+/// A typical flow (using [`HP203B::read_temperature`]) might look like this:
 ///
 /// ```no_run
 /// use hp203b::{HP203B, ReadGuard};
@@ -607,7 +605,7 @@ where
 /// #     Channel::SensorPressureTemperature,
 /// # )?
 /// };
-/// let mut temp_guard = alti.read_temp()?;
+/// let mut temp_guard = alti.read_temperature()?;
 ///
 /// // do something else while the altimeter calculates...
 ///
