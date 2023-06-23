@@ -13,36 +13,31 @@ pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
 macro_rules! test_alti {
     ($i2c:expr, $delay:expr) => {{
-        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL).unwrap();
+        let a = HP203B::new($i2c, DEF_OSR, DEF_CHANNEL).unwrap();
         let d = a.read_delay().to_millis();
         debug!("Read delay: {}ms", d);
-        $delay.delay_ms(d).unwrap();
+        $delay.delay_ms(d);
         a
     }};
     ($i2c:expr, $mult:expr => $delay:expr) => {{
-        let a = HP203B::new($i2c.acquire_i2c(), DEF_OSR, DEF_CHANNEL).unwrap();
+        let a = HP203B::new($i2c, DEF_OSR, DEF_CHANNEL).unwrap();
         let d = a.read_delay().to_millis() * $mult;
         debug!("Read delay: {}ms", d);
-        $delay.delay_ms(d).unwrap();
+        $delay.delay_ms(d);
         a
     }};
 }
 
 #[defmt_test::tests]
 mod tests {
+    use cortex_m::delay::Delay;
     use defmt::{debug, info};
-    use embedded_hal::delay::blocking::DelayUs;
-    use embedded_hal_compat::ForwardCompat;
     use fugit::RateExtU32;
     use hal::{gpio, i2c, pac};
     use rp2040_hal as hal;
-    use shared_bus::BusManagerSimple;
 
     type I2CPin<P> = gpio::Pin<P, gpio::Function<gpio::I2C>>;
-    type I2C = BusManagerSimple<
-        i2c::I2C<pac::I2C0, (I2CPin<gpio::bank0::Gpio16>, I2CPin<gpio::bank0::Gpio17>)>,
-    >;
-    type Delay = embedded_hal_compat::Forward<cortex_m::delay::Delay>;
+    type I2C = i2c::I2C<pac::I2C0, (I2CPin<gpio::bank0::Gpio16>, I2CPin<gpio::bank0::Gpio17>)>;
 
     type HP203B<I, M> = hp203b::HP203B<I, M, hp203b::csb::CSBHigh>;
 
@@ -61,19 +56,19 @@ mod tests {
             &mut perips.RESETS,
         );
 
-        let mut delay = cortex_m::delay::Delay::new(core_perips.SYST, 100).forward();
+        let mut delay = cortex_m::delay::Delay::new(core_perips.SYST, 100);
         debug!("Waiting for 400ms");
-        delay.delay_ms(400).unwrap();
+        delay.delay_ms(400);
 
         (
-            BusManagerSimple::new(hal::I2C::i2c0(
+            hal::I2C::i2c0(
                 perips.I2C0,
                 pins.gpio16.into_mode(),
                 pins.gpio17.into_mode(),
                 400.kHz(),
                 &mut perips.RESETS,
                 125.MHz(),
-            )),
+            ),
             delay,
         )
     }

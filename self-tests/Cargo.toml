@@ -17,22 +17,14 @@ defmt-test = "0.3.0"
 fugit = { version = "0.3.6", features = ["defmt"] }
 hp203b = { path = "..", features = ["defmt"] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
-rp2040-hal = { version = "0.6.0", features = ["defmt", "eh1_0_alpha"] }
+rp2040-hal = { version = "0.8.2", features = ["defmt", "eh1_0_alpha"] }
 rp2040-boot2 = "0.2"
-cortex-m-rt = "0.7.1"
-shared-bus = { version = "0.2.4", default-features = false, features = ["cortex-m", "eh-alpha"] }
-nb = "1.0.0"
 cortex-m = "0.7.6"
-embedded-hal-compat = { version = "0.7.0", features = ["defmt"] }
-embedded-hal = "1.0.0-alpha.8"
+embedded-hal = "1.0.0-alpha.10"
 
 [features]
 # set logging levels here
-default = [
-  # in tests, enable all logs
-  "defmt-trace",
-  "hp203b/defmt",
-]
+default = ["defmt-trace", "hp203b/defmt"]
 
 # do NOT modify these features
 defmt-default = []
