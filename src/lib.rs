@@ -54,6 +54,7 @@ use core::marker::PhantomData;
 #[cfg(feature = "defmt")]
 use defmt::{assert, debug, info, trace};
 use embedded_hal::i2c::I2c;
+use paste::paste;
 
 /// Mode-setting for the altimeter
 #[allow(missing_docs)]
@@ -167,7 +168,7 @@ enum Command {
 
 macro_rules! read_methods_inner {
     ($kind:ident, #[$doc:meta], $guard:ident, $ret:ty, $cmd:expr, $retmode:ty) => {
-        paste::paste! {
+        paste! {
         #[$doc]
         ///
         /// Returns a [`ReadGuard`] type for asynchronous usage.
@@ -198,27 +199,27 @@ macro_rules! read_methods_inner {
 
 macro_rules! read_methods {
     ($kind:ident -> $ret:ident; $cmd:expr, $retmode:ty) => {
-        paste::paste! {
-            read_methods_inner!(
-                $kind,
-                #[doc = "Read a [`" $ret "`]"],
-                [<$ret Guard>],
-                $ret,
-                $cmd,
-                $retmode
-            );
+        paste! {
+        read_methods_inner!(
+            $kind,
+            #[doc = "Read a [`" $ret "`]"],
+            [<$ret Guard>],
+            $ret,
+            $cmd,
+            $retmode
+        );
         }
     };
     ($kind1:ident $kind2:ident -> ($ret1:ident, $ret2:ident); $cmd:expr, $retmode:ty) => {
-        paste::paste! {
-            read_methods_inner!(
-                [<$kind2 _ $kind1>],
-                #[doc = "Read a [`" $ret1 "`] and [`" $ret2 "`] simultaneously"],
-                [<$ret1 $ret2 Guard>],
-                ($ret1, $ret2),
-                $cmd,
-                $retmode
-            );
+        paste! {
+        read_methods_inner!(
+            [<$kind2 _ $kind1>],
+            #[doc = "Read a [`" $ret1 "`] and [`" $ret2 "`] simultaneously"],
+            [<$ret1 $ret2 Guard>],
+            ($ret1, $ret2),
+            $cmd,
+            $retmode
+        );
         }
     };
 }
@@ -614,7 +615,11 @@ where
 /// println!("Temperature: {} degrees", temp.0);
 /// # Ok(()) }
 /// ```
-pub trait ReadGuard<T> {
+// TODO: this is basically an implementation of `Future`
+pub trait ReadGuard {
+    /// Type of reading yielded by this guard
+    type Reading;
+
     /// Associated error type
     ///
     /// Will match the error type of the I2C given to [`HP203B`].
@@ -622,12 +627,13 @@ pub trait ReadGuard<T> {
 
     /// Expected delay of this measurement being ready
     fn delay(&self) -> MicrosDurationU32;
+
     /// Read the value off the device or yield execution if not ready
     ///
     /// # Panics
     ///
     /// Panics if the value has previously been taken.
-    fn try_take(&mut self) -> nb::Result<T, Self::Error>;
+    fn try_take(&mut self) -> nb::Result<Self::Reading, Self::Error>;
 }
 
 macro_rules! readguard_impl_inner {
@@ -637,9 +643,10 @@ macro_rules! readguard_impl_inner {
             Option<&'a mut HP203B<I, M, C>>,
         );
 
-        impl<'a, I: I2c<Error = E>, M: mode::BarometricMeasurement, C: csb::CSB, E>
-            ReadGuard<$rettype> for $name<'a, I, M, C>
+        impl<'a, I: I2c<Error = E>, M: mode::BarometricMeasurement, C: csb::CSB, E> ReadGuard
+            for $name<'a, I, M, C>
         {
+            type Reading = $rettype;
             type Error = E;
 
             fn delay(&self) -> MicrosDurationU32 {
@@ -660,7 +667,7 @@ macro_rules! readguard_impl_inner {
 }
 macro_rules! readguard_impl {
     ($kind:ident, $flag:expr) => {
-        paste::paste! {
+        paste! {
         readguard_impl_inner!(
             [<$kind Guard>],
             $kind,
@@ -672,7 +679,7 @@ macro_rules! readguard_impl {
         }
     };
     ($kind1:ident, $kind2:ident, $flag:expr) => {
-        paste::paste! {
+        paste! {
         #[allow(non_snake_case)]
         #[inline(always)]
         fn [<__ $kind1 $kind2 conv>](val: [u8; 6]) -> ($kind1, $kind2) {
@@ -723,7 +730,7 @@ fn read_unsigned(reading: &[u8]) -> f32 {
 
 macro_rules! reading_impl {
     ($kind:ident, $unit:expr, $reader:path) => {
-        paste::paste! {
+        paste! {
         #[doc = $kind " reading, in"]
         #[doc = $unit]
         #[derive(Copy, Clone, Debug, PartialEq)]
